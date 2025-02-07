@@ -5,7 +5,7 @@ Yet Another Motionsense Service utility
 ## Getting started
 
 - Install dependencies 
-    - `pip install gradio`
+    - `pip install gradio bleak`
 - Launch the application
     - `python app.py`
 - Visit http://127.0.0.1:7860 (by default, check on-screen prompt)
