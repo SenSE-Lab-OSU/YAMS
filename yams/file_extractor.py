@@ -6,7 +6,7 @@ from tqdm import tqdm
 import time
 import zipfile
 import tempfile
-# import psutil
+import psutil
 
 def create_zip(filename, file_paths):
     temp_dir = tempfile.gettempdir()
@@ -15,15 +15,15 @@ def create_zip(filename, file_paths):
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for file in file_paths:
             zipf.write(file, arcname=os.path.basename(file))  # Store without full path
-
     return zip_path
 
-# def get_flash_drives():
-#     flash_drives = []
-#     for partition in psutil.disk_partitions():
-#         if "removable" in partition.opts.lower() or "usb" in partition.device.lower():
-#             flash_drives.append(partition.device)
-#     return flash_drives
+def get_flash_drives():
+    flash_drives = []
+    for partition in psutil.disk_partitions():
+        if "removable" in partition.opts.lower() or "usb" in partition.device.lower():
+            flash_drives.append(partition.device)
+    return gr.Dropdown(choices=flash_drives, value=flash_drives[0] if len(flash_drives) > 0 else None,
+                       allow_custom_value=True, )
 
 def get_msense_files(src_path, label):
     progress = gr.Progress()
@@ -58,7 +58,10 @@ def get_msense_files(src_path, label):
 
 def file_extractor_interface():
     with gr.Column():
-        msense_path = gr.Text("F:\\", label="MotionSenSE path")
+        with gr.Row():
+            msense_path = gr.Dropdown(label="MotionSenSE path", allow_custom_value=True)
+            refreash_path_btn = gr.Button("Refresh")
+
         label = gr.Text("msense4", label="Wristband name")
         extract_btn = gr.Button("Get Files 📂")
 
@@ -67,3 +70,4 @@ def file_extractor_interface():
     files = gr.File(label="Extracted zip file")
 
     extract_btn.click(get_msense_files, inputs=[msense_path, label], outputs=[info_panel, files])
+    refreash_path_btn.click(get_flash_drives, outputs=msense_path)
