@@ -6,7 +6,7 @@ Yet Another Motionsense Service utility
 ### Windows
 
 1. Download the script
-    - Download the [scripts\run.bat](scripts\run.bat) and save it in your desired folder.
+    - Download the [scripts/run.bat](scripts/run.bat) and save it in your desired folder.
 2. Run the script
     - Run the script by double-click the `run.bat` file
 3. Setting up
