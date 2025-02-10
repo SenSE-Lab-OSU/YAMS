@@ -1,9 +1,13 @@
 # YAMS
 Yet Another Motionsense Service utility
 
+## Quickstart
 
-## Getting started
 
+## Development guide
+
+- Clone the repository
+    - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
 - Install dependencies 
     - `pip install gradio bleak`
 - Launch the application
@@ -13,7 +17,7 @@ Yet Another Motionsense Service utility
 
 ## Roadmap
 
-- [ ] Device data transfer
+- [x] Device data transfer
 - [ ] Device data post processing
     - [ ] format conversion
     - [ ] visualization

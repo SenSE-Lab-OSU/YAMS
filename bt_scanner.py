@@ -33,13 +33,13 @@ def connect_devices(devices):
 
 def bt_scanner_interface():
     text = gr.Text("MSense", label="Device filter")
-    bt_search = gr.Button("Search BT devices")
+    bt_search = gr.Button("Search Bluetooth devices ⌚")
 
     available_devices = gr.CheckboxGroup()
 
     bt_search.click(search_bt_devices, inputs=text, outputs=available_devices)
 
-    bt_connect = gr.Button("Connect selected devices")
+    bt_connect = gr.Button("Connect selected devices ☑️")
 
     bt_connect.click(connect_devices, inputs=available_devices)
 
