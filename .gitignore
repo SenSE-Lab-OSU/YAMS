@@ -3,3 +3,5 @@ __pycache__/
 *$py.class
 *.json
 data/*
+dist/*
+yams_util*

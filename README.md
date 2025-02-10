@@ -3,6 +3,9 @@ Yet Another Motionsense Service utility
 
 ## Quickstart
 
+- `pip install -U yams-util`
+- `python -m yams`
+
 
 ## Development guide
 
