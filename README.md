@@ -3,9 +3,26 @@ Yet Another Motionsense Service utility
 
 ## Quickstart
 
+### Windows
+
+1. Download the script
+    - Download the [scripts\run.bat](scripts\run.bat) and save it in your desired folder.
+2. Run the script
+    - Run the script by double-click the `run.bat` file
+3. Setting up
+    - The script will perform any necessary setup. 
+    - Once the setup is complete, you will see a messge similar to: `* Running on local URL:  http://127.0.0.1:7860`
+4. Access the application
+    - Open a web browser and navigate to http://127.0.0.1:7860 or the URL displayed in the prompt.
+
+### MacOS / Linux
+
+Coming soon!
+
+## Installation
+
 - `pip install -U yams-util`
 - `python -m yams`
-
 
 ## Development guide
 

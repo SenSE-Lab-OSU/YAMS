@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "yams-util"
 version = "0.0.1"
 authors = [
-  { name="Yuyi Chang", email="22040659+YuyiChang@users.noreply.github.com" },
+  { name="Yuyi Chang", email="roomier_guanine_05@icloud.com" },
 ]
 dependencies = [
     "bleak",
