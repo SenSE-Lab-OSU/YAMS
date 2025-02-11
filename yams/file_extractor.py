@@ -52,15 +52,16 @@ def get_msense_files(src_path, label):
         datetime_str = time.strftime("%y%m%d%H%M")
         zip_name = f"{datetime_str}-{label}.zip"
         zip_path = create_zip(zip_name, dst_files)
-        return f"Successfully extracted {len(file_list)} to directory {dst_path}", zip_path
+        gr.Info(f"Downloading {zip_path}... ")
+        return f"Successfully extracted {len(file_list)} to directory {dst_path}", zip_path, gr.DownloadButton(label="🎉Download data", value=zip_path, interactive=True)
     except Exception as e:
-        return str(e), None
+        return str(e), None, gr.DownloadButton("No file to be downloaded", interactive=False)
 
 def file_extractor_interface():
     with gr.Column():
         with gr.Row():
-            msense_path = gr.Dropdown(label="MotionSenSE path", allow_custom_value=True)
-            refreash_path_btn = gr.Button("Refresh")
+            msense_path = gr.Dropdown(label="📁 MotionSenSE path", allow_custom_value=True)
+            refreash_path_btn = gr.Button("🔄 Refresh")
 
         label = gr.Text("msense4", label="Wristband name")
         extract_btn = gr.Button("Get Files 📂")
@@ -69,5 +70,7 @@ def file_extractor_interface():
 
     files = gr.File(label="Extracted zip file")
 
-    extract_btn.click(get_msense_files, inputs=[msense_path, label], outputs=[info_panel, files])
+    download_btn = gr.DownloadButton("No file to be downloaded", interactive=False)
+
+    extract_btn.click(get_msense_files, inputs=[msense_path, label], outputs=[info_panel, files, download_btn])
     refreash_path_btn.click(get_flash_drives, outputs=msense_path)
