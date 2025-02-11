@@ -1,3 +1,15 @@
+---
+title: YAMS
+emoji: 🍠
+colorFrom: white
+colorTo: white
+sdk: gradio
+sdk_version: 5.15.0
+app_file: yams/__main__.py
+pinned: false
+license: mit
+---
+
 # YAMS
 Yet Another Motionsense Service utility
 
@@ -29,7 +41,7 @@ Coming soon!
 - Clone the repository
     - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
 - Install dependencies 
-    - `pip install gradio bleak`
+    - `pip install gradio bleak psutil`
 - Launch the application
     - `python -m yams`
 - Visit http://127.0.0.1:7860 (by default, check on-screen prompt)
