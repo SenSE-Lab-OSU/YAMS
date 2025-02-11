@@ -4,6 +4,8 @@ from glob import glob
 import os
 import re
 import json
+import tempfile
+from yams.file_extractor import get_flash_drives
 
 device_info = {}
 
@@ -28,8 +30,10 @@ def get_uuid_from_path(target_path):
 
 def save_device_info(output_path):
     global device_info
+    output_path = os.path.join(tempfile.gettempdir(), os.path.basename(output_path))
     with open(output_path, "w") as f:
         json.dump(device_info, f, indent=4)
+    return gr.DownloadButton(label=f"Download {os.path.basename(output_path)}", value=output_path)
 
 
 def add_device_info(serial, uuid):
@@ -43,27 +47,36 @@ def reset_device_info():
     device_info = {}
     return device_info
 
+def update_download(output_name):
+    global device_info
+    return save_device_info(output_name)
+
 def uuid_extractor_interface():
     with gr.Column():
-        msense_path = gr.Text("F:\\", label="MotionSenSE path")
-        extract_btn = gr.Button("Get UUID")
+        with gr.Row():
+            msense_path = gr.Dropdown(label="📁 MotionSenSE path", allow_custom_value=True)
+            refreash_path_btn = gr.Button("🔄 Refresh")
+            refreash_path_btn.click(get_flash_drives, outputs=msense_path)
+        extract_btn = gr.Button("🔧 Get UUID")
 
     with gr.Column():
         uuid_field = gr.Text("UUID will be shown here", label="UUID")
         msense_serial = gr.Text("4ANA002", label="Serial number")
-        add_btn = gr.Button("Add uuid-serial pair")
+        add_btn = gr.Button("📝 Add uuid-serial pair")
 
     with gr.Row():
-        device_info_preview = gr.JSON(device_info, label="Device info preview")
-        json_reset_btn = gr.Button("Clear device info")
+        device_info_preview = gr.JSON(device_info, label="Device info")
+        json_reset_btn = gr.Button("🚮 Clear device info")
 
     with gr.Row():
         output_name = gr.Text("device_info.json", label="Output file name")
-        save_btn = gr.Button("Save device info")
+        save_btn = gr.DownloadButton("💾 Save device info")
 
     extract_btn.click(get_uuid_from_path, inputs=msense_path, outputs=uuid_field)
     add_btn.click(add_device_info, inputs=[msense_serial, uuid_field], outputs=device_info_preview)
-    save_btn.click(save_device_info, inputs=output_name)
+    save_btn.click(save_device_info, inputs=output_name, outputs=save_btn)
     json_reset_btn.click(reset_device_info, outputs=device_info_preview)
+
+    device_info_preview.change(update_download, inputs=output_name, outputs=save_btn)
 
 

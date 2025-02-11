@@ -31,7 +31,7 @@ Coming soon!
 - Install dependencies 
     - `pip install gradio bleak`
 - Launch the application
-    - `python app.py`
+    - `python -m yams`
 - Visit http://127.0.0.1:7860 (by default, check on-screen prompt)
 
 
@@ -42,3 +42,10 @@ Coming soon!
     - [ ] format conversion
     - [ ] visualization
 - [ ] simple data collection utilities
+
+
+## Acknowledgement
+
+- Conceptualization: [MPADA](https://github.com/yuyichang/mpada)
+- BT control adapted from [MotionSenseHRV-BioImpedance-Interface
+](https://github.com/SenSE-Lab-OSU/MotionSenseHRV-BioImpedance-Interface).
