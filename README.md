@@ -13,6 +13,8 @@ license: mit
 # YAMS
 Yet Another Motionsense Service utility
 
+### [Code](https://github.com/SenSE-Lab-OSU/YAMS) | [PyPI](https://pypi.org/project/yams-util/) | [🤗 Demo (UI only)](https://huggingface.co/spaces/Oink8154/YAMS)
+
 ## Quickstart
 
 ### Windows
