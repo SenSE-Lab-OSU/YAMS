@@ -1,8 +1,8 @@
 ---
 title: YAMS
 emoji: 🍠
-colorFrom: white
-colorTo: white
+colorFrom: purple
+colorTo: purple
 sdk: gradio
 sdk_version: 5.15.0
 app_file: yams/__main__.py
