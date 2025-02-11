@@ -42,3 +42,10 @@ Coming soon!
     - [ ] format conversion
     - [ ] visualization
 - [ ] simple data collection utilities
+
+
+## Acknowledgement
+
+- Conceptualization: [MPADA](https://github.com/yuyichang/mpada)
+- BT control adapted from [MotionSenseHRV-BioImpedance-Interface
+](https://github.com/SenSE-Lab-OSU/MotionSenseHRV-BioImpedance-Interface).

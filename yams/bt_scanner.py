@@ -68,7 +68,7 @@ def bt_scanner_interface():
     bt_connect.click(connect_devices, inputs=available_devices)
 
     # erase control
-    with gr.Accordion(label="🚨Danger zone🚨", open=False):
+    with gr.Accordion(label="🚨🚨🚨Danger zone🚨🚨🚨", open=False):
         erase_passcode = gr.Number(label="Erase code")
         erase_enable = gr.Checkbox(label="Enable erase feature")
         
