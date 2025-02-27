@@ -48,6 +48,16 @@ async def erase_dev(addr):
         print(str(e))
         gr.Error(f"⚠️{str(e)}")
 
+async def write_dev(addr, val, characteristics="da39c931-1d81-48e2-9c68-d0ae4bbd351f"):
+    try:
+        async with BleakClient(addr) as client:
+            gr.Info(f"collection control {client.address} {val}")
+            value = struct.pack("<I", int(val))
+            await client.write_gatt_char(characteristics, value)
+    except Exception as e:
+        print(str(e))
+        gr.Error(f"⚠️{str(e)}")
+
 
 def erase_flash_data(available_devices):
     gr.Info("Erasing flash data...")
@@ -67,6 +77,17 @@ def bt_scanner_interface():
     bt_search.click(search_bt_devices, inputs=text, outputs=available_devices)
     bt_connect.click(connect_devices, inputs=available_devices)
 
+    with gr.Accordion(label="Device control", open=True):
+        # conect_btn = gr.Button("Connect selected", interactive=False)
+        memo_page = gr.Text(label="Status memo")
+
+        start_btn = gr.Button("Start")
+        stop_btn = gr.Button("Stop")
+
+        start_btn.click(collection_ctl_start, inputs=[available_devices])
+        stop_btn.click(collection_ctl_stop, inputs=[available_devices])
+        
+
     # erase control
     with gr.Accordion(label="🚨🚨🚨Danger zone🚨🚨🚨", open=False):
         erase_passcode = gr.Number(label="Erase code")
@@ -77,6 +98,21 @@ def bt_scanner_interface():
                         outputs=[erase_passcode, erase_enable, erase_btn])
 
         erase_enable.change(set_erase_feature, inputs=[erase_enable, erase_passcode], outputs=[erase_btn])
+
+def collection_ctl_start(devices):
+    collection_ctl(devices, True)
+
+def collection_ctl_stop(devices):
+    collection_ctl(devices, False)
+
+def collection_ctl(devices, start_collect):
+    if start_collect:
+        val = 1
+    else:
+        val = 0
+
+    for k in devices:
+        asyncio.run(write_dev(device_info[k], val))
 
 def set_erase_feature(erase_enable, erase_passcode):
     if erase_enable:
