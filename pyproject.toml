@@ -11,7 +11,7 @@ authors = [
 dependencies = [
     "bleak",
     "gradio",
-    "psutil
+    "psutil"
 ]
 description = "Yet Another MotionSenSE Service Utility"
 readme = "README.md"
