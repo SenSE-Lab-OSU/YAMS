@@ -1,5 +1,6 @@
+#!/bin/bash
 python -m venv .venv
-call .venv\Scripts\activate
+source .venv/bin/activate
 python -m pip install -U yams-util 
 python -m yams
 deactivate
