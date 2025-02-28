@@ -100,10 +100,14 @@ def bt_scanner_interface():
         erase_enable.change(set_erase_feature, inputs=[erase_enable, erase_passcode], outputs=[erase_btn])
 
 def collection_ctl_start(devices):
+    gr.Info("Collection control starting... 🦭")
     collection_ctl(devices, True)
+    gr.Info("✅✅✅ All done ✅✅✅")
 
 def collection_ctl_stop(devices):
+    gr.Info("Collection control stoping... 🛑")
     collection_ctl(devices, False)
+    gr.Info("✅✅✅ All done ✅✅✅")
 
 def collection_ctl(devices, start_collect):
     if start_collect:
