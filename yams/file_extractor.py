@@ -52,7 +52,7 @@ def get_msense_files(src_path, label):
         datetime_str = time.strftime("%y%m%d%H%M")
         zip_name = f"{datetime_str}-{label}.zip"
         zip_path = create_zip(zip_name, dst_files)
-        gr.Info(f"Downloading {zip_path}... ")
+        gr.Info(f"File ready")
         return f"Successfully extracted {len(file_list)} to directory {dst_path}", zip_path, gr.DownloadButton(label="🎉Download data", value=zip_path, interactive=True)
     except Exception as e:
         return str(e), None, gr.DownloadButton("No file to be downloaded", interactive=False)

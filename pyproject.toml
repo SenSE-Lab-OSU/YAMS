@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yams-util"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
   { name="Yuyi Chang", email="roomier_guanine_05@icloud.com" },
 ]
 dependencies = [
     "bleak",
     "gradio",
-    "psutil"
+    "psutil",
+    "apscheduler"
 ]
 description = "Yet Another MotionSenSE Service Utility"
 readme = "README.md"

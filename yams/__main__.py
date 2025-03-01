@@ -16,4 +16,6 @@ if __name__ == '__main__':
             "[YAMS](https://github.com/SenSE-Lab-OSU/YAMS): Yet Another MotionSenSE Service utility",
             elem_id="footer"
         )
+
+    demo.queue()
     demo.launch()
