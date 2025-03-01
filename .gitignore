@@ -5,4 +5,4 @@ __pycache__/
 data/*
 dist/*
 yams_util*
-scripts/.venv
+scripts/*/.venv
