@@ -23,8 +23,11 @@ def get_flash_drives():
         if "removable" in partition.opts.lower() or "usb" in partition.device.lower():
             flash_drives.append(partition.device)
     new_dropdown = gr.Dropdown(choices=flash_drives, value=flash_drives[0] if len(flash_drives) > 0 else None, allow_custom_value=True)
-    return new_dropdown, default_refresh_btn(), gr.Text("1", label="Wristband name", visible=False), gr.Button("Get Files 📂", visible=True), gr.Button("", visible=False)
+    return new_dropdown
 
+def interface_refresh_reset():
+    dropdown = get_flash_drives()
+    return dropdown, default_refresh_btn(), gr.Text("1", label="Wristband name", visible=False), gr.Button("Get Files 📂", visible=True), gr.Button("", visible=False)
 
 def get_msense_files(src_path, label):
     if label == "":
@@ -85,7 +88,7 @@ def file_extractor_interface():
     label.change(check_label, inputs=label)
 
     confirm_btn.click(get_msense_files, inputs=[msense_path, label], outputs=[info_panel, download_btn])
-    refreash_path_btn.click(get_flash_drives, outputs=[msense_path, download_btn,
+    refreash_path_btn.click(interface_refresh_reset, outputs=[msense_path, download_btn,
                                                        label,
                                                        extract_btn,
                                                        confirm_btn])
