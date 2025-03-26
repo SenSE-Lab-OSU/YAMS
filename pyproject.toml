@@ -12,7 +12,8 @@ dependencies = [
     "bleak",
     "gradio",
     "psutil",
-    "apscheduler"
+    "apscheduler",
+    "matplotlib"
 ]
 description = "Yet Another MotionSenSE Service Utility"
 readme = "README.md"
