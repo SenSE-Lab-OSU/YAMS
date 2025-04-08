@@ -39,7 +39,7 @@ Yet Another Motionsense Service utility
 
 ### Extract onboard data
 
-Refer to [Extract onboard data](doc/file_extraction.md)
+Refer to [Extract onboard data](doc/file_download.md)
 
 ### Emergency stop
 
