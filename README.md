@@ -37,9 +37,13 @@ Yet Another Motionsense Service utility
 
 ## General usage
 
-### Extract onboard data
+### Download onboard data
 
 Refer to [Extract onboard data](doc/file_download.md)
+
+### Extract raw data
+
+Refer to [Data Extraction Feature](doc/data_extraction.md)
 
 ### Emergency stop
 
@@ -71,9 +75,9 @@ To halt all on-going collection on the MotionSenSE wristbands,
 ## Roadmap
 
 - [x] Device data transfer
-- [ ] Device data post processing
-    - [ ] format conversion
-    - [ ] visualization
+- [x] Device data post processing
+    - [x] format conversion
+    - [x] visualization
 - [x] simple data collection utilities
 - [ ] LSL support
 - [ ] Auto reconnect

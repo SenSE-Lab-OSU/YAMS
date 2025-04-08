@@ -1,4 +1,4 @@
-# Data Extraction Feature – Technical Documentation
+# Data Extraction Feature
 
 ## Overview
 
@@ -44,17 +44,17 @@ The extractor generates one CSV file for each type of data per subject:
 
 | Header    | Description                                                              | Unit             |
 |-----------|--------------------------------------------------------------------------|------------------|
-| AccX      | Accelerometer X-axis                                                     | int16            |
-| AccY      | Accelerometer Y-axis                                                     | int16            |
-| AccZ      | Accelerometer Z-axis                                                     | int16            |
-| GyroX     | Gyroscope X-axis                                                         | float32          |
-| GyroY     | Gyroscope Y-axis                                                         | float32          |
-| GyroZ     | Gyroscope Z-axis                                                         | float32          |
-| ENMO      | Euclidean Norm Minus One                                                 | n/a              |
-| Timestamp | (Reserved) Reference timestamp - for generic use please refer to CDCT    | uint32           |
-| Counter   | (Reserved) Sample counter                                                | uint16           |
-| CDCT      | Calculated data collection time - time when the data is collected in UTC | sec              |
-| Datetime  | Human readable date time in UTC                                          | MM/DD/YYYY HH:MM |
+| `AccX`      | Accelerometer X-axis                                                     | `int16`            |
+| `AccY`      | Accelerometer Y-axis                                                     | `int16`            |
+| `AccZ`      | Accelerometer Z-axis                                                     | `int16`            |
+| `GyroX`     | Gyroscope X-axis                                                         | `float32`          |
+| `GyroY`     | Gyroscope Y-axis                                                         | `float32`          |
+| `GyroZ`     | Gyroscope Z-axis                                                         | `float32`          |
+| `ENMO`      | Euclidean Norm Minus One                                                 | `n/a `             |
+| `Timestamp` | (Reserved) Reference timestamp - for generic use please refer to CDCT    | `uint32`           |
+| `Counter`   | (Reserved) Package counter                                                | `uint16`           |
+| `CDCT`      | Calculated data collection time - time when the data is collected in UTC | `sec`              |
+| `Datetime`  | Human readable date time in UTC                                          | `MM/DD/YYYY HH:MM` |
 
 ### PPG csv data format
 
@@ -62,11 +62,11 @@ The extractor generates one CSV file for each type of data per subject:
 
 | Header    | Description                                                              | Unit             |
 |-----------|--------------------------------------------------------------------------|------------------|
-| ir1       | Infrared light #1                                                        | uint32           |
-| ir2       | Infrared light #2                                                        | uint32           |
-| g1        | Green light #1                                                           | uint32           |
-| g2        | Green light #2                                                           | uint32           |
-| Timestamp | (Reserved) Reference timestamp - for generic use please refer to CDCT    | uint32           |
-| Counter   | (Reserved) Sample counter                                                | uint16           |
-| CDCT      | Calculated data collection time - time when the data is collected in UTC | sec              |
-| Datetime  | Human readable date time in UTC                                          | MM/DD/YYYY HH:MM |
+| `ir1`       | Infrared light #1                                                        | `uint32`           |
+| `ir2`       | Infrared light #2                                                        | `uint32`           |
+| `g1`        | Green light #1                                                           | `uint32`           |
+| `g2`        | Green light #2                                                           | `uint32`           |
+| `Timestamp` | (Reserved) Reference timestamp - for generic use please refer to CDCT    | `uint32`           |
+| `Counter`   | (Reserved) Package counter                                                | `uint16`           |
+| `CDCT`      | Calculated data collection time - time when the data is collected in UTC | `sec`              |
+| `Datetime`  | Human readable date time in UTC                                          | `MM/DD/YYYY HH:MM` |
