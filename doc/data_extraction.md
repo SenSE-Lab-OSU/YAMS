@@ -44,9 +44,9 @@ The extractor generates one CSV file for each type of data per subject:
 
 | Header    | Description                                                              | Unit             |
 |-----------|--------------------------------------------------------------------------|------------------|
-| `AccX`      | Accelerometer X-axis                                                     | `int16`            |
-| `AccY`      | Accelerometer Y-axis                                                     | `int16`            |
-| `AccZ`      | Accelerometer Z-axis                                                     | `int16`            |
+| `AccX`      | Accelerometer X-axis                                                     | `g`            |
+| `AccY`      | Accelerometer Y-axis                                                     | `g`            |
+| `AccZ`      | Accelerometer Z-axis                                                     | `g`            |
 | `GyroX`     | Gyroscope X-axis                                                         | `float32`          |
 | `GyroY`     | Gyroscope Y-axis                                                         | `float32`          |
 | `GyroZ`     | Gyroscope Z-axis                                                         | `float32`          |

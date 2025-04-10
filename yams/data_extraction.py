@@ -215,14 +215,25 @@ def collect_all_data_by_prefix(path, prefix: str, labels: list[str], types: list
     return dataset
 
 
+def unit_conversion_ac(data_set):
+    for c in ['AccX', 'AccY', 'AccZ']:
+        data_set[c] = data_set[c] /(2**16-1)*8
+    return data_set
+
+
 def generate_csv_for_pattern(in_dir, type_prefix: str, search_key: str, labels, formats, plot=False, out_dir="./"):
     file_name = f"{type_prefix}"
     print(type_prefix, search_key)
     data_set = collect_all_data_by_prefix(in_dir, search_key, labels, formats)
     if data_set is not None:
         os.makedirs(out_dir, exist_ok=True)
-        data_set.to_csv(os.path.join(out_dir, file_name))
         counter_validity_check(data_set)
+
+        if 'ac' in search_key:
+            print("perform unit conversion for IMU")
+            data_set = unit_conversion_ac(data_set)
+
+        data_set.to_csv(os.path.join(out_dir, file_name))
         if plot: raise NotImplementedError
         # if plot: graph_generation.pd_graph_generation(search_key, data_set)
 
