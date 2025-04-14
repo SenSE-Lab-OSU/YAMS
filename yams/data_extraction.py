@@ -10,7 +10,7 @@ import pandas as pd
 import re
 import numpy as np
 import numpy
-from datetime import datetime
+from datetime import datetime, UTC
 import gradio as gr
 
 def data_extraction_interface():
@@ -21,6 +21,97 @@ def data_extraction_interface():
     btn = gr.Button("Extract raw data")
     btn.click(main, inputs=[in_dir, out_dir])
 
+
+class DataExtractor():
+    def __init__(self, in_dir, out_dir, legacy_fs=False):
+        if legacy_fs:
+            self.sample_tick = 200
+        else:
+            self.sample_tick = 320
+        self.in_dir = in_dir
+        self.out_dir = out_dir
+
+        self.ppg_labels = ["ir1", "ir2", "g1", "g2",  "Timestamp", "Counter"]
+        self.ppg_formats = ["<i", "<i", "<i", "<i", "<i", "<i"]
+
+        self.acc_labels = ["AccX", "AccY", "AccZ", "GyroX", "GyroY", "GyroZ", "ENMO", "Timestamp", "Counter"]
+        self.acc_formats = ["<h", "<h", "<h", "<f", "<f", "<f", "<f", "<i", "<i"]
+
+    def run(self):
+        ids = self.obtain_predix_ids()
+        for id in ids:            
+            search_prefix = id + "ac"
+            file_name = search_prefix + ".csv"
+            self.extract_csv(search_prefix, file_name, self.acc_labels, self.acc_formats)
+
+            search_prefix = id + "ppg"
+            file_name = search_prefix + ".csv"
+            self.extract_csv(search_prefix, file_name, self.ppg_labels, self.ppg_formats)
+
+    def extract_csv(self, search_prefix, file_name, labels, formats):
+        self.generate_csv_for_pattern(self.in_dir, file_name, search_prefix, labels, formats, out_dir=self.out_dir)
+
+    def generate_csv_for_pattern(self, in_dir, type_prefix: str, search_key: str, labels, formats, out_dir="./"):
+        file_name = f"{type_prefix}"
+        print(type_prefix, search_key)
+        data_set = self.collect_all_data_by_prefix(in_dir, search_key, labels, formats)
+        if data_set is not None:
+            os.makedirs(out_dir, exist_ok=True)
+            counter_validity_check(data_set)
+
+            # Datetime str
+            dt = [datetime.fromtimestamp(int(t), UTC).strftime("%Y/%m/%d %H:%M:%S") for t in data_set['CDCT']]
+            data_set['Datetime'] = dt
+
+            if 'ac' in search_key:
+                print("perform unit conversion for IMU")
+                data_set = unit_conversion_ac(data_set)
+
+            data_set.to_csv(os.path.join(out_dir, file_name))
+
+    def collect_all_data_by_prefix(self, path, prefix: str, labels: list[str], types: list[str]):
+        total_errors = 0
+
+        all_data = []
+        for element in range(len(labels)):
+            all_data.append([])
+
+        files = gather_files_by_prefix(prefix, path)  
+
+        if len(files) == 0:
+            return
+        for file in files:
+            full_path = os.path.join(path, file)
+            print("full path: ", full_path)
+            test_file = open(full_path, "rb")
+            data = test_file.read()
+            if len(data) != 0:
+                total_errors += process_data(data, all_data, types)
+            else:
+                print("Warning: found empty file!")
+
+        full_dict = {}
+        for index in range(len(labels)):
+            full_dict[labels[index]] = all_data[index]
+
+        dataset = pd.DataFrame(full_dict)
+        dataset = get_cdct(dataset, files, fs=self.sample_tick)
+
+        return dataset
+
+
+    def obtain_predix_ids(self):
+        all_files = [""]
+        files = os.listdir(self.in_dir)
+        for file in files:
+            if file[0].isdigit():
+                id = re.search(r'\d+', file)
+                if id is not None:
+                    id = id.group()
+                    if id not in all_files:
+                        all_files.append(id)
+        return all_files
+    
 
 def process_data_test(data) -> int:
     errors = 0
@@ -161,20 +252,6 @@ def gather_files_by_prefix(prefix: str, path):
     return all_files
 
 
-def obtain_prefix_ids(path):
-    all_files = []
-    files = os.listdir(path)
-    for file in files:
-        if file[0].isdigit():
-            id = re.search(r'\d+', file)
-            if id is not None:
-                id = id.group()
-                if id not in all_files:
-                    all_files.append(id)
-
-    return all_files
-
-
 def counter_validity_check(df: pd.DataFrame):
     counter_columns = df.iloc[:, -1:]
     counter_arr = numpy.array(counter_columns).flatten()
@@ -184,58 +261,10 @@ def counter_validity_check(df: pd.DataFrame):
     print("and number of non matching samples: " + str(numpy.count_nonzero(check_array == 0)))
 
 
-def collect_all_data_by_prefix(path, prefix: str, labels: list[str], types: list[str]):
-    total_errors = 0
-
-    all_data = []
-    for element in range(len(labels)):
-        all_data.append([])
-
-    files = gather_files_by_prefix(prefix, path)  
-
-    if len(files) == 0:
-        return
-    for file in files:
-        full_path = os.path.join(path, file)
-        print("full path: ", full_path)
-        test_file = open(full_path, "rb")
-        data = test_file.read()
-        if len(data) != 0:
-            total_errors += process_data(data, all_data, types)
-        else:
-            print("Warning: found empty file!")
-
-    full_dict = {}
-    for index in range(len(labels)):
-        full_dict[labels[index]] = all_data[index]
-
-    dataset = pd.DataFrame(full_dict)
-    dataset = get_cdct(dataset, files)
-
-    return dataset
-
-
 def unit_conversion_ac(data_set):
     for c in ['AccX', 'AccY', 'AccZ']:
         data_set[c] = data_set[c] /(2**16-1)*8
     return data_set
-
-
-def generate_csv_for_pattern(in_dir, type_prefix: str, search_key: str, labels, formats, plot=False, out_dir="./"):
-    file_name = f"{type_prefix}"
-    print(type_prefix, search_key)
-    data_set = collect_all_data_by_prefix(in_dir, search_key, labels, formats)
-    if data_set is not None:
-        os.makedirs(out_dir, exist_ok=True)
-        counter_validity_check(data_set)
-
-        if 'ac' in search_key:
-            print("perform unit conversion for IMU")
-            data_set = unit_conversion_ac(data_set)
-
-        data_set.to_csv(os.path.join(out_dir, file_name))
-        if plot: raise NotImplementedError
-        # if plot: graph_generation.pd_graph_generation(search_key, data_set)
 
 # get init time
 def get_t0(file_list):
@@ -252,44 +281,28 @@ def get_cdct(df, bin_list, fs=320):
     counter_diff = np.insert(counter_diff, 0, 0)
 
     df['CDCT'] = t0 + np.cumsum(counter_diff) / fs
-    df['Datetime'] = [datetime.utcfromtimestamp(int(t)) for t in df['CDCT']]
+
     return df
 
-def main(in_dir, out_dir, gradio=True):
-    ppg_labels = ["ir1", "ir2", "g1", "g2",  "Timestamp", "Counter"]
-    ppg_formats = ["<i", "<i", "<i", "<i", "<i", "<i"]
+def main(in_dir, out_dir, gradio=True, legacy_fs=False):
+    extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs)
+    extractor.run()
+
+    if gradio: gr.Info("✅ Extraction completed")
+    print("operation completed.")
+    # except Exception as e:
+    #     # gr.Error(str(e)) if gradio else print(str(e))
+    #     print(str(e))
+    #     print("operation completed with error")
 
 
-    acc_labels = ["AccX", "AccY", "AccZ", "GyroX", "GyroY", "GyroZ", "ENMO", "Timestamp", "Counter"]
-    acc_formats = ["<h", "<h", "<h", "<f", "<f", "<f", "<f", "<i", "<i"]
-
-    try:
-        ids = obtain_prefix_ids(in_dir)
-        ids.append("")
-
-        for id in ids:
-            search_prefix = id + "ac"
-            file_name = search_prefix + ".csv"
-            generate_csv_for_pattern(in_dir, file_name, search_prefix, acc_labels, acc_formats, out_dir=out_dir)
-            search_prefix = id + "ppg"
-            file_name = search_prefix + ".csv"
-            generate_csv_for_pattern(in_dir, file_name, search_prefix, ppg_labels, ppg_formats, out_dir=out_dir)
-
-        if gradio: gr.Info("✅ Extraction completed")
-        print("operation completed.")
-    except Exception as e:
-        # gr.Error(str(e)) if gradio else print(str(e))
-        print(str(e))
-        print("operation completed with error")
-
-
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--in_dir', type=str, help="directory where binary files are located")
     parser.add_argument('-o', '--out_dir', type=str, default="./", help="output directory")
+    parser.add_argument('--legacy_fs', action='store_true', default=False, help="Use legacy sampling rate 25Hz for CDCT")
 
     args = parser.parse_args()
 
-    main(args.in_dir, args.out_dir, gradio=False)
+    main(args.in_dir, args.out_dir, gradio=False, legacy_fs=args.legacy_fs)
     
