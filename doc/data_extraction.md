@@ -15,7 +15,8 @@ The data extraction tool takes raw binary files as input and processes them into
 2. Navigate to the **🛠️ Data Extractor** tab.
 3. In the **Input directory** field, specify the folder containing the raw binary files.
 4. In the **Output directory** field, specify where the extracted CSV files should be saved.
-5. Once all fields are completed, click the **Extract raw data** button to begin the process.
+5. (Uncommon) Check "legacy sampling rate" box if the data was collected on a older firmware version. Do NOT check this box if using firmware >- 4.5.3.
+6. Once all fields are completed, click the **Extract raw data** button to begin the process.
 
 
 ## Expected Input Structure
@@ -70,3 +71,14 @@ The extractor generates one CSV file for each type of data per subject:
 | `Counter`   | (Reserved) Package counter                                                | `uint16`           |
 | `CDCT`      | Calculated data collection time - time when the data is collected in UTC | `sec`              |
 | `Datetime`  | Human readable date time in UTC                                          | `MM/DD/YYYY HH:MM` |
+
+
+## Command line usage
+
+Most common (e.g., firmware >= 4.5)
+
+- `python -m yams.data_extraction -i <path/to/binary/data> -o <path/to/output>` 
+
+Not common. For firmware with 25 Hz sampling rate
+
+- `python -m yams.data_extraction -i <path/to/binary/data> -o <path/to/output> --legacy_fs` 

@@ -18,8 +18,10 @@ def data_extraction_interface():
     in_dir = gr.Text("/path/to/binary/data", label="Input directory")
     out_dir = gr.Text("/path/to/output", label="Output directory")
 
+    legacy_fs = gr.Checkbox(False, label="(Uncommon) legacy sampling rate")
+
     btn = gr.Button("Extract raw data")
-    btn.click(main, inputs=[in_dir, out_dir])
+    btn.click(main, inputs=[in_dir, out_dir, legacy_fs])
 
 
 class DataExtractor():
@@ -28,8 +30,17 @@ class DataExtractor():
             self.sample_tick = 200
         else:
             self.sample_tick = 320
+
+        print(f"sampling tick set to {self.sample_tick}")
+
         self.in_dir = in_dir
         self.out_dir = out_dir
+
+        os.makedirs(out_dir, exist_ok=True)
+        with open(os.path.join(self.out_dir, "README.txt"), "w") as file:
+            file.write(f"Raw data directory = {self.in_dir}\n")
+            file.write(f"Legacy sampling rate = {legacy_fs} (True: 25 Hz, False: 32 Hz)\n")
+            file.write(f"\nMore MotionSenSE utility available at https://github.com/SenSE-Lab-OSU/YAMS\n")
 
         self.ppg_labels = ["ir1", "ir2", "g1", "g2",  "Timestamp", "Counter"]
         self.ppg_formats = ["<i", "<i", "<i", "<i", "<i", "<i"]
@@ -284,7 +295,7 @@ def get_cdct(df, bin_list, fs=320):
 
     return df
 
-def main(in_dir, out_dir, gradio=True, legacy_fs=False):
+def main(in_dir, out_dir, legacy_fs=False, gradio=True):
     extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs)
     extractor.run()
 
@@ -304,5 +315,5 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(args.in_dir, args.out_dir, gradio=False, legacy_fs=args.legacy_fs)
+    main(args.in_dir, args.out_dir, legacy_fs=args.legacy_fs, gradio=False)
     
