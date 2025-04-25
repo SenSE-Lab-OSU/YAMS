@@ -7,6 +7,8 @@ import time
 import zipfile
 import tempfile
 import psutil
+import re
+import json
 
 def create_zip(filename, file_paths):
     temp_dir = tempfile.gettempdir()
@@ -29,10 +31,30 @@ def interface_refresh_reset():
     dropdown = get_flash_drives()
     return dropdown, default_refresh_btn(), gr.Text("1", label="Wristband name", visible=False), gr.Button("Get Files 📂", visible=True), gr.Button("", visible=False)
 
+def get_device_info(file_path="device_info.json"):
+    if not os.path.exists(file_path):
+        print(f"{file_path} does not exist.")
+        return None
+
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+
+    mac_table = {v: k for k, v in data.items()}
+    return mac_table
+
+def look_up_device_name(mac_addr, file_path="device_info.json"):
+    mac_table = get_device_info(file_path=file_path)
+    if mac_table is None: return mac_addr
+
+    if mac_addr in mac_table.keys():
+        return mac_table[mac_addr]
+    else:
+        return mac_addr
+
 def get_msense_files(src_path, label):
-    if label == "":
-        gr.Warning("Wristband name cannot be empty")
-        return "", gr.DownloadButton("No file to be downloaded", interactive=False)
+    # if label == "":
+    #     gr.Warning("Wristband name cannot be empty")
+    #     return "", gr.DownloadButton("No file to be downloaded", interactive=False)
 
     gr.Info("Start file extraction...")
     progress = gr.Progress()
@@ -57,9 +79,19 @@ def get_msense_files(src_path, label):
             shutil.copy(f, dst_path)
             dst_files.append(dst_path)
             counter += 1
+
+            if dst_path.endswith('.txt'):
+                mac_pattern = r'(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}'
+                with open(dst_path, 'r') as file:
+                    content = file.read()
+                    mac_addr = re.findall(mac_pattern, content)
+                    if len(mac_addr) > 0: mac_addr = mac_addr[0]
+
+        # try looking up dev name
+        dev_name = look_up_device_name(mac_addr).replace(":", "-")
         
         datetime_str = time.strftime("%y%m%d%H%M")
-        zip_name = f"{datetime_str}-{label}.zip"
+        zip_name = f"{datetime_str}-{dev_name}{label}.zip"
         zip_path = create_zip(zip_name, dst_files)
         gr.Info(f"File ready")
         return f"Successfully extracted {len(file_list)} to {os.path.basename(zip_path)}", gr.DownloadButton(label="🎉Download data", value=zip_path, interactive=True)
