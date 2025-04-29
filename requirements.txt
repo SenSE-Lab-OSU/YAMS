@@ -2,3 +2,4 @@ gradio==5.15
 bleak==0.22.3
 psutil
 apscheduler
+matplotlib
