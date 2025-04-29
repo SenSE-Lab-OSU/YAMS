@@ -5,7 +5,7 @@ from bleak import BleakClient
 import struct
 from yams.bluetooth_device import characteristic_bat, get_device_status
 from apscheduler.schedulers.background import BackgroundScheduler
-
+import time
 
 device_info = {}
 dev_status = {}
@@ -74,6 +74,9 @@ async def write_dev(addr, val, characteristics="da39c931-1d81-48e2-9c68-d0ae4bbd
             gr.Info(f"collection control {client.address} {val}")
             value = struct.pack("<I", int(val))
             await client.write_gatt_char(characteristics, value)
+
+            # write unix time
+            await client.write_gatt_char("da39c932-1d81-48e2-9c68-d0ae4bbd351f", struct.pack("<Q", int(time.time())))
     except Exception as e:
         print(str(e))
         gr.Error(f"⚠️{str(e)}")
