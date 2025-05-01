@@ -119,7 +119,7 @@ def get_msense_files(src_path, src_path_grp, label):
             gr.Error(str(e))
             return str(e), gr.DownloadButton("No file to be downloaded", interactive=False)
         
-    combined_zip_path = os.path.join(tempfile.gettempdir(), f"{time.strftime("%y%m%d%H%M")}.zip")
+    combined_zip_path = os.path.join(tempfile.gettempdir(), f"{time.strftime("%y%m%d%H%M")}_msense.zip")
     combine_zips(zip_path_list, combined_zip_path)
     
     gr.Info(f"File ready")

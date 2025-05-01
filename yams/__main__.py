@@ -28,7 +28,7 @@ def main():
         )
 
     demo.queue()
-    demo.launch(server_port=12345)
+    demo.launch(inbrowser=True)
     
 
 if __name__ == '__main__':
