@@ -9,6 +9,35 @@ from yams.file_extractor import get_flash_drives
 
 device_info = {}
 
+
+def device_manager_interface():
+    file_path = "device_info.json"
+    txt = gr.Text(file_path, label="Device info")
+
+    if not os.path.exists(file_path):
+        with open(file_path, "w") as f: json.dump({}, f)
+
+    with open(file_path, "r") as f:
+        device_info = json.load(f)
+    
+    info = gr.JSON(device_info, label="Device info")
+
+    read_btn = gr.Button(f"Read {file_path}")
+    write_btn = gr.Button(f"Save {file_path}")
+
+    read_btn.click(read_device_info, inputs=txt, outputs=info)
+    write_btn.click(write_device_info, inputs=[txt, info])
+
+def read_device_info(file_path):
+    with open(file_path, "r") as f:
+        device_info = json.load(f)
+    return device_info
+
+def write_device_info(file_path, device_info):
+    with open(file_path, "w") as f:
+        json.dump(device_info, f, indent=4)
+
+
 def get_uuid_from_path(target_path):
     file_list = glob(os.path.join(target_path, 'uuid.txt'))
 
