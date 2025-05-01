@@ -73,6 +73,19 @@ To halt all on-going collection on the MotionSenSE wristbands,
     - `python -m yams`
 - Visit http://127.0.0.1:7860 (by default, check on-screen prompt)
 
+## Build guide
+
+- Install pyinstaller via `pip install pyinstaller`
+- Create .spec by `pyi-makespec --collect-data=gradio_client --collect-data=gradio --collect-data=safehttpx --collect-data=groovy --onefile app.py`
+- Manually add the following in `a = analysis ...`
+
+```
+    module_collection_mode={
+        'gradio': 'py',  # Collect gradio package as source .py files
+    },
+```
+- Build the app: `pyinstaller app.spec`
+
 
 ## Roadmap
 
