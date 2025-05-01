@@ -1,4 +1,4 @@
-gradio==5.15
+gradio==5.27
 bleak==0.22.3
 psutil
 apscheduler

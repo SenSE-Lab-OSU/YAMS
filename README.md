@@ -19,6 +19,8 @@ Yet Another Motionsense Service utility
 
 ### Windows
 
+> Python 3.12 or newer is needed
+
 1. Download setup scripts
     - Download the [scripts/windows](scripts/windows) folder and save it in your desired folder
 2. Run the installation script

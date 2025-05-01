@@ -7,3 +7,4 @@ dist/*
 yams_util*
 scripts/*/.venv
 output/*
+build/*

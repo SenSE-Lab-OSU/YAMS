@@ -5,7 +5,8 @@ from yams.file_extractor import file_extractor_interface
 from yams.data_explorer import DataExplorer
 from yams.data_extraction import data_extraction_interface
 
-if __name__ == '__main__':
+
+def main():
     with gr.Blocks(title="YAMS") as demo:
         with gr.Tab("📂 File downloader"):
             file_extractor_interface()
@@ -25,4 +26,8 @@ if __name__ == '__main__':
         )
 
     demo.queue()
-    demo.launch()
+    demo.launch(server_port=12345)
+    
+
+if __name__ == '__main__':
+    main()
