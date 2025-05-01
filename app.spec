@@ -33,6 +33,7 @@ exe = EXE(
     a.datas,
     [],
     name='yams',
+    icon='yams/resources/icons/yams.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

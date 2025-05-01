@@ -28,7 +28,7 @@ def main():
         )
 
     demo.queue()
-    demo.launch(inbrowser=True)
+    demo.launch(inbrowser=True, favicon_path="yams/resources/icons/yams.ico")
     
 
 if __name__ == '__main__':

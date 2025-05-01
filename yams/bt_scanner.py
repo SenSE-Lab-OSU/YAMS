@@ -6,6 +6,7 @@ import struct
 from yams.bluetooth_device import characteristic_bat, get_device_status
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
+import hashlib
 import json
 
 device_info = {}
@@ -81,15 +82,21 @@ async def erase_dev(addr):
         print(str(e))
         gr.Error(f"⚠️{str(e)}")
 
-async def write_dev(addr, val, characteristics="da39c931-1d81-48e2-9c68-d0ae4bbd351f"):
+async def write_dev(addr, val, characteristics="da39c931-1d81-48e2-9c68-d0ae4bbd351f", participant_encoding=None):
+
+    print("==============", participant_encoding)
     try:
         async with BleakClient(addr) as client:
             gr.Info(f"collection control {client.address} {val}")
+            if val > 0:
+                # write unix time
+                await client.write_gatt_char("da39c932-1d81-48e2-9c68-d0ae4bbd351f", struct.pack("<Q", int(time.time())))
+
+                # write participant hash
+                await client.write_gatt_char("da39c933-1d81-48e2-9c68-d0ae4bbd351f", participant_encoding)
+
             value = struct.pack("<I", int(val))
             await client.write_gatt_char(characteristics, value)
-
-            # write unix time
-            await client.write_gatt_char("da39c932-1d81-48e2-9c68-d0ae4bbd351f", struct.pack("<Q", int(time.time())))
     except Exception as e:
         print(str(e))
         gr.Error(f"⚠️{str(e)}")
@@ -123,7 +130,6 @@ def update_status():
     print(dev_status)
     return gr.JSON(dev_status, visible=True)
 
-
 def bt_scanner_interface():
     text = gr.Text("MSense", label="Device filter", scale=2)
 
@@ -140,9 +146,15 @@ def bt_scanner_interface():
     bt_search.click(search_bt_devices, inputs=[text], outputs=available_devices)    
     bt_status.click(get_dev_status, inputs=available_devices, outputs=bt_update_status)
     bt_update_status.click(update_status, outputs=dev_panel)
-    
 
     with gr.Accordion(label="Device control", open=True):
+        default_sub = "sub-Test"
+        default_ses = "sub-00"
+
+        with gr.Row():
+            sub_name = gr.Text(default_sub, label="Subject ID")
+            ses_name = gr.Text(default_ses, label="Session ID")
+            subject_enc = gr.Number(get_participant_encoding(default_sub, default_ses), label='Participant encoding (Read-only)', interactive=False)
         # conect_btn = gr.Button("Connect selected", interactive=False)
         # memo_page = gr.Text(label="Status memo")
 
@@ -150,7 +162,10 @@ def bt_scanner_interface():
             start_btn = gr.Button("Start▶️")
             stop_btn = gr.Button("Stop🛑")
 
-        start_btn.click(collection_ctl_start, inputs=[available_devices])
+        sub_name.change(get_participant_encoding, inputs=[sub_name, ses_name], outputs=subject_enc)
+        ses_name.change(get_participant_encoding, inputs=[sub_name, ses_name], outputs=subject_enc)
+
+        start_btn.click(collection_ctl_start, inputs=[available_devices, sub_name, ses_name])
         stop_btn.click(collection_ctl_stop, inputs=[available_devices])
         
 
@@ -165,9 +180,23 @@ def bt_scanner_interface():
 
         erase_enable.change(set_erase_feature, inputs=[erase_enable, erase_passcode], outputs=[erase_btn])
 
-def collection_ctl_start(devices):
+def get_participant_encoding(sub, ses):
+    enc = compute_int_hash(sub, ses)
+    return struct.unpack("<I", enc)
+
+def compute_int_hash(sub, ses):
+    name = f"{sub}-{ses}"
+    hash_object = hashlib.sha256(name.encode())
+    hex_digest = hash_object.hexdigest()
+    integer_representation = int(hex_digest, 16) % 32000
+    print(name, integer_representation)
+    byte_representation = struct.pack("<I", integer_representation)
+    return byte_representation
+
+def collection_ctl_start(devices, sub, ses):
+    participant_encoding = compute_int_hash(sub, ses)
     gr.Info("Collection control starting... 🦭")
-    collection_ctl(devices, True)
+    collection_ctl(devices, True, participant_encoding=participant_encoding)
     gr.Info("✅✅✅ All done ✅✅✅")
 
 def collection_ctl_stop(devices):
@@ -175,14 +204,14 @@ def collection_ctl_stop(devices):
     collection_ctl(devices, False)
     gr.Info("✅✅✅ All done ✅✅✅")
 
-def collection_ctl(devices, start_collect):
+def collection_ctl(devices, start_collect, participant_encoding=None):
     if start_collect:
         val = 1
     else:
         val = 0
 
     for k in devices:
-        asyncio.run(write_dev(device_info[k], val))
+        asyncio.run(write_dev(device_info[k], val, participant_encoding=participant_encoding))
 
 def set_erase_feature(erase_enable, erase_passcode):
     if erase_enable:

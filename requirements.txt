@@ -1,5 +1,5 @@
-gradio==5.27
-bleak==0.22.3
+gradio
+bleak
 psutil
 apscheduler
 matplotlib

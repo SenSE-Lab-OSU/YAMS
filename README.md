@@ -103,3 +103,4 @@ To halt all on-going collection on the MotionSenSE wristbands,
 - Conceptualization: [MPADA](https://github.com/yuyichang/mpada)
 - BT control adapted from [MotionSenseHRV-BioImpedance-Interface
 ](https://github.com/SenSE-Lab-OSU/MotionSenseHRV-BioImpedance-Interface).
+- icon designed by [Mihimihi](https://www.flaticon.com/free-icons/yam)
