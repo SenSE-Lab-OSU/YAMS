@@ -6,12 +6,21 @@ import struct
 from yams.bluetooth_device import characteristic_bat, get_device_status
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
+import json
 
 device_info = {}
 dev_status = {}
 
 async def bleak_scan(filter_key):
     global device_info
+
+    try:
+        with open("device_info.json", 'r') as file:
+            device_name = json.load(file)
+            device_name = {value: key for key, value in device_name.items()}
+    except:
+        device_name = {}
+
     devices = await BleakScanner.discover()
     for d in devices:
         # print(dir(d))
@@ -20,7 +29,11 @@ async def bleak_scan(filter_key):
         addr = f"{d.address}"
 
         if filter_key in name:
-            device_info[f"{addr} - {name}"] = addr
+            if addr in device_name.keys():
+                alias = device_name[addr]
+                device_info[f"{alias} ({addr}) - {name}"] = addr
+            else:
+                device_info[f"{addr} - {name}"] = addr
 
     print(device_info)
 
