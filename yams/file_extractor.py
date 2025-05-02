@@ -32,7 +32,7 @@ def get_flash_drives():
 
 def interface_refresh_reset():
     dropdown, checkboxes = get_flash_drives()
-    return dropdown, checkboxes, default_refresh_btn(), gr.Text("1", label="Wristband name", visible=False), gr.Button("Get Files 📂", visible=True), gr.Button("", visible=False)
+    return dropdown, checkboxes, default_refresh_btn(), gr.Text("1", label="(Optional) Note", visible=False), gr.Button("Get Files 📂", visible=True), gr.Button("", visible=False)
 
 def get_device_info(file_path="device_info.json"):
     if not os.path.exists(file_path):
@@ -132,7 +132,7 @@ def file_extractor_interface():
             msense_path = gr.Dropdown(label="📁 Custom MotionSenSE path", allow_custom_value=True)
             refreash_path_btn = gr.Button("🔄 Refresh / Start over")
 
-        label = gr.Text("", label="Wristband name", visible=False)
+        label = gr.Text("", label="(Optional) Note", visible=False)
         extract_btn = gr.Button("Get Files 📂")
         confirm_btn = gr.Button("", visible=False)
 
@@ -142,8 +142,6 @@ def file_extractor_interface():
 
     extract_btn.click(prompt_device_name, outputs=[label, confirm_btn, extract_btn])
 
-    label.change(check_label, inputs=label)
-
     confirm_btn.click(get_msense_files, inputs=[msense_path, msense_group, label], outputs=[info_panel, download_btn])
     refreash_path_btn.click(interface_refresh_reset, outputs=[msense_path, msense_group, download_btn,
                                                        label,
@@ -151,11 +149,7 @@ def file_extractor_interface():
                                                        confirm_btn])
 
 def prompt_device_name():
-    return gr.Text("", label="Wristband name", visible=True), gr.Button("Confirm name & Start 🪪", visible=True), gr.Button("Get Files 📂", visible=False)
+    return gr.Text("", label="(Optional) Note", visible=True), gr.Button("Confirm name & Start 🪪", visible=True), gr.Button("Get Files 📂", visible=False)
 
 def default_refresh_btn():
     return gr.DownloadButton("No file to be downloaded", interactive=False)
-
-def check_label(label):
-    if label == "":
-        gr.Warning("Device name cannot be empty")

@@ -8,3 +8,4 @@ yams_util*
 scripts/*/.venv
 output/*
 build/*
+.DS_store
