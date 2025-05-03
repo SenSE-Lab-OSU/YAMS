@@ -23,4 +23,4 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: yams_win
-        path: dist/yams.exe
+        path: dist/windows/yams.exe
