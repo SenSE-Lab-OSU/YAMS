@@ -87,6 +87,11 @@ To halt all on-going collection on the MotionSenSE wristbands,
 - Build the app: `pyinstaller app.spec`
 
 
+### MacOS
+
+`pyi-makespec --collect-data=gradio_client --collect-data=gradio --collect-data=safehttpx --collect-data=groovy --onefile --osx-bundle-identifier 'com.yams' --icon yams/resources/icons/yams.icns app.py`
+
+
 ## Roadmap
 
 - [x] Device data transfer
