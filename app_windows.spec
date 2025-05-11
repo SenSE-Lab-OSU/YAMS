@@ -11,7 +11,7 @@ datas += collect_data_files('groovy')
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('C:/Users/{$USER}/miniconda3/envs/yams/Lib/site-packages/pylsl/lib', '.')],
     datas=datas,
     hiddenimports=[],
     hookspath=[],

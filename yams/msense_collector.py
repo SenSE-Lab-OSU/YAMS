@@ -14,7 +14,7 @@ import numpy as np
 
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
-        self.name = name
+        self.name = name.replace(':', '-')
         info = StreamInfo(name, "MotionSenSE", 2, 25, "float32", peripheral.address())
         super().__init__(info, chunk_size, max_buffered)
 
@@ -173,8 +173,12 @@ class MsenseController():
         self.auto_reconnect = status
 
     def start_collection(self):
+        timestamp = time.strftime("%y%m%d_%H%M")
         # create log dir
-        self.log_dir = os.path.join('log', self.session_info['sub_id'], self.session_info['ses_id'], time.strftime("%y%m%d_%H%M"))
+        self.log_dir = os.path.join('log', 
+                                    self.session_info['sub_id'], 
+                                    self.session_info['ses_id'], 
+                                    f"{self.session_info['participant_enc']}_{timestamp}")
         print(f"create log dir {self.log_dir}")
         os.makedirs(self.log_dir, exist_ok=True)
 
