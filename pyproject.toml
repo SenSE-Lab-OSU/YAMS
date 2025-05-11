@@ -13,7 +13,9 @@ dependencies = [
     "gradio",
     "psutil",
     "apscheduler",
-    "matplotlib"
+    "matplotlib",
+    "simplepyble",
+    "pylsl"
 ]
 description = "Yet Another MotionSenSE Service Utility"
 readme = "README.md"

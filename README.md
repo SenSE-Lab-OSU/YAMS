@@ -17,6 +17,21 @@ Yet Another Motionsense Service utility
 
 ## Quickstart
 
+### Development
+
+1. (optional) create a dedicated conda environment
+    - `conda create -n yams python=3.12`
+    - `conda activate yams`
+2. Clone this repository
+    - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
+    - `cd yams`
+3. Install dependencies
+    - `pip install -r requirements.txt`
+4. Config `liblsl`
+    - `conda install -c conda-forge liblsl`
+5. Lauch YAMS
+    - `python -m yams`
+
 ### Windows
 
 > Python 3.12 or newer is needed
