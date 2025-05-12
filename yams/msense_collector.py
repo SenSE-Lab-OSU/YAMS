@@ -134,7 +134,7 @@ class MsenseController():
 
         with gr.Accordion(label="Device control", open=True):
             default_sub = "sub-Test"
-            default_ses = "sub-00"
+            default_ses = "ses-00"
 
             with gr.Row():
                 sub_name = gr.Text(default_sub, label="Subject ID")
