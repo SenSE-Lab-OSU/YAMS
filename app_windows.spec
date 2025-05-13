@@ -32,7 +32,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='yams',
+    name='YAMS_Windows_x64',
     icon='yams/resources/icons/yams.ico',
     debug=False,
     bootloader_ignore_signals=False,
