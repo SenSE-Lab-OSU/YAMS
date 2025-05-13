@@ -3,3 +3,5 @@ bleak
 psutil
 apscheduler
 matplotlib
+simplepyble
+pylsl

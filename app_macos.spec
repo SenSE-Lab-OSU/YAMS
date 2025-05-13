@@ -6,12 +6,12 @@ datas += collect_data_files('gradio_client')
 datas += collect_data_files('gradio')
 datas += collect_data_files('safehttpx')
 datas += collect_data_files('groovy')
-
+datas += collect_data_files('pylsl')
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('/opt/miniconda3/envs/yams/bin/../lib/', 'liblsl.dylib')],
     datas=datas,
     hiddenimports=[],
     hookspath=[],
@@ -32,7 +32,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='app',
+    name='YAMS_MacOS_arm64',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -47,9 +47,4 @@ exe = EXE(
     entitlements_file=None,
     icon=['yams/resources/icons/yams.icns'],
 )
-app = BUNDLE(
-    exe,
-    name='app.app',
-    icon='yams/resources/icons/yams.icns',
-    bundle_identifier='com.yams',
-)
+

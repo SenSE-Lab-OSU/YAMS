@@ -9,3 +9,4 @@ scripts/*/.venv
 output/*
 build/*
 .DS_store
+log/*

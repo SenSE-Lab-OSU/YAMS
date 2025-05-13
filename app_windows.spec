@@ -11,7 +11,7 @@ datas += collect_data_files('groovy')
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('C:/Users/{$USER}/miniconda3/envs/yams/Lib/site-packages/pylsl/lib', '.')],
     datas=datas,
     hiddenimports=[],
     hookspath=[],
@@ -32,7 +32,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='yams',
+    name='YAMS_Windows_x64',
     icon='yams/resources/icons/yams.ico',
     debug=False,
     bootloader_ignore_signals=False,

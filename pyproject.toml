@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yams-util"
-version = "0.3.0"
+version = "1.0.0"
 authors = [
   { name="Yuyi Chang", email="roomier_guanine_05@icloud.com" },
 ]
@@ -13,7 +13,9 @@ dependencies = [
     "gradio",
     "psutil",
     "apscheduler",
-    "matplotlib"
+    "matplotlib",
+    "simplepyble",
+    "pylsl"
 ]
 description = "Yet Another MotionSenSE Service Utility"
 readme = "README.md"

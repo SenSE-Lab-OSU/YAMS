@@ -17,7 +17,26 @@ Yet Another Motionsense Service utility
 
 ## Quickstart
 
-### Windows
+### Pre-compiled version
+
+- Download the latest release from [here](https://github.com/SenSE-Lab-OSU/YAMS/releases)
+
+### Development
+
+1. (optional) create a dedicated conda environment
+    - `conda create -n yams python=3.12`
+    - `conda activate yams`
+2. Clone this repository
+    - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
+    - `cd yams`
+3. Install dependencies
+    - `pip install -r requirements.txt`
+4. Config `liblsl`
+    - `conda install -c conda-forge liblsl`
+5. Lauch YAMS
+    - `python -m yams`
+
+### (Deprecated) Windows
 
 > Python 3.12 or newer is needed
 
@@ -32,7 +51,7 @@ Yet Another Motionsense Service utility
 4. Access the application
     - Open a web browser and navigate to http://127.0.0.1:7860 or the URL displayed in the prompt.
 
-### MacOS / Linux
+### (Deprecated) MacOS / Linux
 
 1. Download [scripts/unix](scripts/unix) to a desired location
 2. Run `run.sh` to install and start the app
@@ -99,8 +118,8 @@ To halt all on-going collection on the MotionSenSE wristbands,
     - [x] format conversion
     - [x] visualization
 - [x] simple data collection utilities
-- [ ] LSL support
-- [ ] Auto reconnect
+- [x] LSL support
+- [x] Auto reconnect
 
 
 ## Acknowledgement
