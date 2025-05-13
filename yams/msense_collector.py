@@ -9,8 +9,9 @@ from functools import partial
 from apscheduler.schedulers.background import BackgroundScheduler
 import hashlib
 from pylsl import StreamInfo, StreamOutlet
-import os
+import os, sys
 import numpy as np
+import logging
 
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
@@ -37,6 +38,17 @@ class MsenseOutlet(StreamOutlet):
 
 class MsenseController():
     def __init__(self):
+        # init logger
+        self.logger = logging.getLogger(__name__)
+        os.makedirs('log', exist_ok=True)
+        logging.basicConfig(level=logging.INFO, 
+                            format='%(asctime)s [%(levelname)s] %(message)s',
+                            handlers=[
+                                logging.FileHandler(os.path.join('log', "yams_session.log")),
+                                logging.StreamHandler()
+                            ])
+        self.logger.info(f"Start YAMS session log ")
+    
         self.auto_reconnect = True
         self.devices = {}
         self.device_name = self.get_dev_dict()
@@ -45,7 +57,6 @@ class MsenseController():
         self.active_outlets = {}
 
         self.scheduler = BackgroundScheduler()
-
 
     def get_dev_dict(self):
         try:
@@ -61,7 +72,8 @@ class MsenseController():
         assert len(adapters) > 0, "No BT adapter found"
         
         self.adapter = adapters[0]
-        print(f"Selected adapter: {self.adapter.identifier()} [{self.adapter.address()}]")
+        # print(f"Selected adapter: {self.adapter.identifier()} [{self.adapter.address()}]")
+        self.logger.info(f"Selected adapter: {self.adapter.identifier()} [{self.adapter.address()}]")
 
     def get_available_devices_checkbox(self, filter_name="MSense"):
         self.scan_devices(filter_name=filter_name)
@@ -71,13 +83,14 @@ class MsenseController():
 
     def scan_devices(self, filter_name="MSense"):
         print("start scanning devices")
+        self.logger.info("start device scanning")
         self.adapter.scan_for(5000)
         peripherals = self.adapter.scan_get_results()
 
         self.devices = {}
         for i, peripheral in enumerate(peripherals):
             if filter_name in peripheral.identifier():
-                print(f"{i}: {peripheral.identifier()} [{peripheral.address()}]")
+                self.logger.info(f"{i}: {peripheral.identifier()} [{peripheral.address()}]")
                 # try to look up device alias
                 if peripheral.identifier() in self.device_name.keys():
                     alias = self.device_name[peripheral.identifier()]
@@ -94,14 +107,14 @@ class MsenseController():
         del(self.active_outlets)
         self.active_outlets = {}
 
-        self.log(f"Start connecting to devices: {names}")
+        self.logger.info(f"Start connecting to devices: {names}")
         for n in names:
             gr.Info(f"Connecting to devices: {n}")
             print(f'==== {n}')
             p = self.devices[n]
             print(f"=== {p.identifier()} at {p.address()}")
-            p.set_callback_on_connected(lambda: print(f"{self.tic()}: [INFO] {p.identifier()} is connected"))
-            p.set_callback_on_disconnected(lambda: print(f"{self.tic()}: [INFO] {p.identifier()} is disconnected"))
+            p.set_callback_on_connected(lambda: self.logger.info(f"{n} {p.identifier()} is connected"))
+            p.set_callback_on_disconnected(lambda: self.logger.info(f"{n} {p.identifier()} is disconnected"))
             p.connect()
             self.active_devices[n] = p
             self.active_outlets[n] = MsenseOutlet(n, p)
@@ -113,6 +126,7 @@ class MsenseController():
             except Exception as e:
                 print(str(e))
         gr.Warning(f"All devices disconnected")
+        self.logger.info("All devices disconnected")
 
     def tic(self):
         return datetime.datetime.now()
@@ -149,6 +163,17 @@ class MsenseController():
                 btn_start.click(self.start_collection)
                 btn_stop.click(self.end_collection)
 
+        # erase control
+        with gr.Accordion(label="🚨🚨🚨Danger zone🚨🚨🚨", open=False):
+            erase_passcode = gr.Number(label="Erase code")
+            erase_enable = gr.Checkbox(label="Enable erase feature")
+            
+            erase_btn = gr.Button("Erase flash data", interactive=False)
+            erase_btn.click(self.erase_flash_data, 
+                            outputs=[erase_passcode, erase_enable, erase_btn])
+
+            erase_enable.change(self.set_erase_feature, inputs=[erase_enable, erase_passcode], outputs=[erase_btn])
+
         with gr.Accordion(label="Advanced options", open=False):
             text = gr.Text("MSense", label="Device filter", scale=2)
 
@@ -183,6 +208,10 @@ class MsenseController():
         os.makedirs(self.log_dir, exist_ok=True)
 
         gr.Info("▶️ Start data collection...")
+        self.logger.info(f"Start data collection with out dir = {self.log_dir}")
+        self.logger.info(f"Subject ID = {self.session_info['sub_id']}")
+        self.logger.info(f"Session ID = {self.session_info['ses_id']}")
+        self.logger.info(f"Participant encoding = {self.session_info['participant_enc']}")
 
         for name, p in self.active_devices.items():
             print(name, p.is_connected(), p.is_connectable())
@@ -192,6 +221,7 @@ class MsenseController():
 
     def end_collection(self):
         gr.Info("🛑 Stop data collection...")
+        self.logger.info("Data collection stopped")
         for name, p in self.active_devices.items():
             print(name, p.is_connected(), p.is_connectable())
             self.collection_ctl(name, False)
@@ -202,7 +232,6 @@ class MsenseController():
         # if starting, do the initialization
         if start:
             # write unix time
-            print("==== writing", int(time.time()), time.time())
             peripheral.write_request("da39c930-1d81-48e2-9c68-d0ae4bbd351f", 
                                      "da39c932-1d81-48e2-9c68-d0ae4bbd351f", 
                                      struct.pack("<Q", int(time.time())))
@@ -273,37 +302,37 @@ class MsenseController():
         for name, device in self.active_devices.items():
             try:
                 if not device.is_connected():
-                    print(f"[INFO] {device.identifier()} disconnected. Attempting to reconnect...")
+                    self.logger.warning(f"{device.identifier()} disconnected. Attempting to reconnect..")
                     device.connect()
                     if device.is_connected():
-                        print(f"[INFO] Reconnected to {device.identifier()}")
+                        self.logger.info(f"Reconnected to {device.identifier()}")
                         self.register_enmo(device, name)
                     else:
-                        print(f"[WARN] Failed to reconnect to {device.identifier()}")
+                        self.logger.warning(f"Failed to reconnect to {device.identifier()}")
                 else:
-                    print(f"[OK] {device.identifier()} is still connected.")
+                    self.logger.debug(f"{device.identifier()} is still connected.")
             except Exception as e:
-                print(f"[ERROR] Error checking device {device.identifier()}: {e}")
+                self.logger.error(f"Error checking device {device.identifier()}: {e}")
 
     def start_device_monitor(self, interval_seconds=10):
         if not self.scheduler.running:
             self.scheduler.start()
         if not self.scheduler.get_job("device_monitor"):
             self.scheduler.add_job(self.check_and_reconnect_devices, "interval", seconds=interval_seconds, id="device_monitor")
-            print("[INFO] Started device monitor job.")
+            self.logger.info("Started device monitor job")
 
     def stop_device_monitor(self):
         job = self.scheduler.get_job("device_monitor")
         if job:
             job.remove()
-            print("[INFO] Stopped device monitor job.")
+            self.logger.info("Stopped device monitor job")
 
     def get_participant_encoding(self, sub, ses):
         name = f"{sub}-{ses}"
         hash_object = hashlib.sha256(name.encode())
         hex_digest = hash_object.hexdigest()
         integer_representation = int(hex_digest, 16) % 32000
-        print(name, integer_representation)
+        # print(name, integer_representation)
         self.participant_byte = struct.pack("<I", integer_representation)
 
         self.session_info = {
@@ -313,3 +342,31 @@ class MsenseController():
         }
         return integer_representation
 
+
+    def set_erase_feature(self, erase_enable, erase_passcode):
+        if erase_enable:
+            if erase_passcode == 68:
+                gr.Warning("Erase feature is enabled!")
+                return gr.Button("Erase flash data", interactive=True)
+            else:
+                gr.Warning("Incorrect password")
+                return gr.Button("Erase flash data", interactive=False)
+        else:
+            gr.Info("Erase feature disabled")
+            return gr.Button("Erase flash data", interactive=False)
+        
+    def erase_flash_data(self):
+        gr.Info("Erasing flash data...")
+        self.logger.info("Erasing flash data...")
+
+        service_uuid = "da39c930-1d81-48e2-9c68-d0ae4bbd351f"
+        rst_char = "da39c934-1d81-48e2-9c68-d0ae4bbd351f"
+
+        for name, p in self.active_devices.items():
+            try:
+                p.write_request(service_uuid, rst_char, struct.pack("<I", int(68)))
+            except Exception as e:
+                self.logger.error(str(e))
+                gr.Error(f"⚠️{str(e)}")
+        self.logger.info("Erase completed")
+        return gr.Number(value=None, label="Erase code"), gr.Checkbox(label="Enable erase feature", value=False), gr.Button("Erase flash data", interactive=False)

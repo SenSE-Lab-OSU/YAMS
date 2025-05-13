@@ -15,8 +15,8 @@ def main():
             file_extractor_interface()
         with gr.Tab("📋 UUID extractor"):
             uuid_extractor_interface()
-        with gr.Tab("📡 Bluetooth scanner"):
-            bt_scanner_interface()       
+        # with gr.Tab("📡 Bluetooth scanner"):
+        #     bt_scanner_interface()       
         with gr.Tab("📊 Data viewer"):
             data_explorer = DataExplorer()
             data_explorer.interface()
