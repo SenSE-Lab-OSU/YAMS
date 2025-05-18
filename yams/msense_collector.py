@@ -13,13 +13,21 @@ import os, sys
 import numpy as np
 import logging
 
+yams_dir = "yams-data"
+
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
         self.name = name.replace(':', '-')
-        info = StreamInfo(name, "MotionSenSE", 2, 25, "float32", peripheral.address())
+        info = StreamInfo(name, "MotionSenSE", 2, 0.5, "float32", peripheral.address())
         super().__init__(info, chunk_size, max_buffered)
 
-        self.log_dir = os.path.join("log", "default")
+        self.log_dir = os.path.join(yams_dir, "default")
+        self.msg = f"📻 {self.tic()} LSL OK. Ready to start..."
+        self.msg_fun = f"📻 {self.tic()} LSL OK. Ready to start..."
+
+    def tic(self):
+        now = datetime.datetime.now()
+        return now.strftime("%H:%M:%S")
 
     def save_data(self, data):
         self.log_path = os.path.join(self.log_dir, f"{self.name}.txt")
@@ -27,27 +35,37 @@ class MsenseOutlet(StreamOutlet):
         if not os.path.exists(self.log_path):
             with open(self.log_path, 'w') as f: pass
 
+        data.append(time.time())
         # Append NumPy array as a line
         with open(self.log_path, 'a') as f:
             np.savetxt(f, [data], fmt='%s')
 
     def push_sample(self, x):
-        self.save_data(x)
-        return super().push_sample(x)
+        formatted = '\t'.join(str(num) for num in x)
+        self.msg = f"📻 {self.tic()} last LSL pushed: {formatted}"
+        
+        fun_msg = "".join(["✅" for i in range(int(time.time())%10)])
+        self.msg_fun = f"📻 {self.tic()} {fun_msg}"
 
+        super().push_sample(x)
+        self.save_data(x)
 
 class MsenseController():
     def __init__(self):
+        # current YYMMDD
+        now = datetime.datetime.now()
+        date = now.strftime("%Y-%m-%d")
+    
         # init logger
         self.logger = logging.getLogger(__name__)
-        os.makedirs('log', exist_ok=True)
+        os.makedirs(yams_dir, exist_ok=True)
         logging.basicConfig(level=logging.INFO, 
                             format='%(asctime)s [%(levelname)s] %(message)s',
                             handlers=[
-                                logging.FileHandler(os.path.join('log', "yams_session.log")),
+                                logging.FileHandler(os.path.join(yams_dir, f"{date}_yams_session.log")),
                                 logging.StreamHandler()
                             ])
-        self.logger.info(f"Start YAMS session log ")
+        self.logger.info(f"Start YAMS session log")
     
         self.auto_reconnect = True
         self.devices = {}
@@ -163,22 +181,14 @@ class MsenseController():
                 btn_start = gr.Button("Start▶️")
                 btn_stop = gr.Button("Stop🛑")
                 
-            collection_status = gr.CheckboxGroup()
-
-            btn_start.click(self.start_collection, outputs=collection_status)
+            btn_start.click(self.start_collection)
             btn_stop.click(self.end_collection)
 
 
-        self.params = {'Test': {
-                "type": "device",
-                "default": "default",
-                "description": "this is a description"
-            }}
+        self.params = {}
         params = gr.ParamViewer(self.params)
-        # params.change(self.update_params, outputs=params)
-        timer = gr.Timer(value=1)
+        timer = gr.Timer(value=3)
         timer.tick(fn=self.update_params, outputs=params)
-        # gr.on("interval", fn=self.update_params, stream_every=5, outputs=params)
 
         # erase control
         with gr.Accordion(label="🚨🚨🚨Danger zone🚨🚨🚨", open=False):
@@ -212,9 +222,14 @@ class MsenseController():
         bt_search.click(self.get_available_devices_checkbox, inputs=text, outputs=available_devices)    
 
     def update_params(self):
-        tic = time.time()
-        funny = "".join(["✅" for i in range(int(tic)%5)])
-        self.params['Test']['type'] = f"{funny} {tic}"
+        self.params = {}
+        for name, device in self.active_devices.items():
+            connection_status = "✅ Connected" if device.is_connected() else "🚫 Disconnected"
+            self.params[name] = {
+                'type': f"{connection_status} | {self.active_outlets[name].msg_fun}",
+                'description': self.active_outlets[name].msg
+            }
+
         return self.params
 
     def set_auto_reconnect(self, status):
@@ -223,7 +238,7 @@ class MsenseController():
     def start_collection(self):
         timestamp = time.strftime("%y%m%d_%H%M")
         # create log dir
-        self.log_dir = os.path.join('log', 
+        self.log_dir = os.path.join(yams_dir, 
                                     self.session_info['sub_id'], 
                                     self.session_info['ses_id'], 
                                     f"{self.session_info['participant_enc']}_{timestamp}")
@@ -240,8 +255,6 @@ class MsenseController():
             print(name, p.is_connected(), p.is_connectable())
             self.collection_ctl(name, True)
             self.active_outlets[name].log_dir = self.log_dir
-
-        return gr.CheckboxGroup(choices=[f"✅ {name}" for name in self.active_devices.keys()])
 
     def end_collection(self):
         gr.Info("🛑 Stop data collection...")
