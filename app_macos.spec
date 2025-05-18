@@ -6,7 +6,7 @@ datas += collect_data_files('gradio_client')
 datas += collect_data_files('gradio')
 datas += collect_data_files('safehttpx')
 datas += collect_data_files('groovy')
-datas += collect_data_files('pylsl')
+
 
 a = Analysis(
     ['app.py'],
@@ -39,7 +39,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -47,4 +47,3 @@ exe = EXE(
     entitlements_file=None,
     icon=['yams/resources/icons/yams.icns'],
 )
-
