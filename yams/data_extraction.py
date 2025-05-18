@@ -18,18 +18,37 @@ def data_extraction_interface():
     in_dir = gr.Text("/path/to/binary/data", label="Input directory")
     out_dir = gr.Text("/path/to/output", label="Output directory")
 
+    note = gr.Text("", label="Note")
+
     legacy_fs = gr.Checkbox(False, label="(Uncommon) legacy sampling rate")
 
     btn = gr.Button("Extract raw data")
-    btn.click(main, inputs=[in_dir, out_dir, legacy_fs])
+
+    with gr.Accordion("Encoding mapping"):
+        if os.path.exists("./data/session_table.csv"):
+            df = pd.read_csv("./data/session_table.csv")
+        else:
+            df = pd.DataFrame(data={
+                'subject_id': ["sub-4001"],
+                "session_id": ["ses-01"],
+                "participant_encoding": [123]
+            })
+        dataframe = gr.DataFrame(value=df)
+
+    btn.click(main, inputs=[in_dir, out_dir, legacy_fs, dataframe, note])
 
 
 class DataExtractor():
-    def __init__(self, in_dir, out_dir, legacy_fs=False):
+    def __init__(self, in_dir, out_dir, legacy_fs=False, df=None, note=""):
         if legacy_fs:
             self.sample_tick = 200
         else:
             self.sample_tick = 320
+
+        self.note = note
+
+        self.df = df
+        self.encoding_alias = self.get_encoding_alias()
 
         print(f"sampling tick set to {self.sample_tick}")
 
@@ -48,22 +67,35 @@ class DataExtractor():
         self.acc_labels = ["AccX", "AccY", "AccZ", "GyroX", "GyroY", "GyroZ", "ENMO", "Timestamp", "Counter"]
         self.acc_formats = ["<h", "<h", "<h", "<f", "<f", "<f", "<f", "<i", "<i"]
 
+    def get_encoding_alias(self):
+        alias_dict = {}
+        for i in range(len(self.df.index)):
+            curr = self.df.iloc[i]
+            alias_dict[f"{curr['encoding']}"] = f"{curr['subject_id']}_{curr['session_id']}_{self.note}_{curr['encoding']}"
+        print(alias_dict)
+        return alias_dict
+
     def run(self):
         ids = self.obtain_predix_ids()
         for id in ids:            
             search_prefix = id + "ac"
             file_name = search_prefix + ".csv"
-            self.extract_csv(search_prefix, file_name, self.acc_labels, self.acc_formats)
+            self.extract_csv(search_prefix, file_name, self.acc_labels, self.acc_formats, id=id)
 
             search_prefix = id + "ppg"
             file_name = search_prefix + ".csv"
-            self.extract_csv(search_prefix, file_name, self.ppg_labels, self.ppg_formats)
+            self.extract_csv(search_prefix, file_name, self.ppg_labels, self.ppg_formats, id=id)
 
-    def extract_csv(self, search_prefix, file_name, labels, formats):
-        self.generate_csv_for_pattern(self.in_dir, file_name, search_prefix, labels, formats, out_dir=self.out_dir)
+    def extract_csv(self, search_prefix, file_name, labels, formats, id=-1):
+        self.generate_csv_for_pattern(self.in_dir, file_name, search_prefix, labels, formats, out_dir=self.out_dir, id=id)
 
-    def generate_csv_for_pattern(self, in_dir, type_prefix: str, search_key: str, labels, formats, out_dir="./"):
-        file_name = f"{type_prefix}"
+    def generate_csv_for_pattern(self, in_dir, type_prefix: str, search_key: str, labels, formats, out_dir="./", id=-1):
+        if str(id) in self.encoding_alias.keys():
+            alias = self.encoding_alias[str(id)]
+            print('=====', id, alias)
+            file_name = f"{type_prefix}".replace(id, alias)
+        else:   
+            file_name = f"{self.note}{type_prefix}"
         print(type_prefix, search_key)
         data_set = self.collect_all_data_by_prefix(in_dir, search_key, labels, formats)
         if data_set is not None:
@@ -295,9 +327,11 @@ def get_cdct(df, bin_list, fs=320):
 
     return df
 
-def main(in_dir, out_dir, legacy_fs=False, gradio=True):
-    extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs)
+def main(in_dir, out_dir, legacy_fs=False, df=None, note="", gradio=True):
+    extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs, df=df, note=note)
     extractor.run()
+
+    print(df.head())
 
     if gradio: gr.Info("✅ Extraction completed")
     print("operation completed.")

@@ -65,6 +65,8 @@ class MsenseController():
                 device_name = {value: key for key, value in device_name.items()}
         except:
             device_name = {}
+
+        print(device_name)
         return device_name
 
     def init_adapter(self):
@@ -92,8 +94,8 @@ class MsenseController():
             if filter_name in peripheral.identifier():
                 self.logger.info(f"{i}: {peripheral.identifier()} [{peripheral.address()}]")
                 # try to look up device alias
-                if peripheral.identifier() in self.device_name.keys():
-                    alias = self.device_name[peripheral.identifier()]
+                if peripheral.address() in self.device_name.keys():
+                    alias = self.device_name[peripheral.address()]
                     name = f"{peripheral.identifier()} ({alias}) [{peripheral.address()}]"
                 else:
                     name = f"{peripheral.identifier()} [{peripheral.address()}]"
@@ -160,8 +162,23 @@ class MsenseController():
             with gr.Row():
                 btn_start = gr.Button("Start▶️")
                 btn_stop = gr.Button("Stop🛑")
-                btn_start.click(self.start_collection)
-                btn_stop.click(self.end_collection)
+                
+            collection_status = gr.CheckboxGroup()
+
+            btn_start.click(self.start_collection, outputs=collection_status)
+            btn_stop.click(self.end_collection)
+
+
+        self.params = {'Test': {
+                "type": "device",
+                "default": "default",
+                "description": "this is a description"
+            }}
+        params = gr.ParamViewer(self.params)
+        # params.change(self.update_params, outputs=params)
+        timer = gr.Timer(value=1)
+        timer.tick(fn=self.update_params, outputs=params)
+        # gr.on("interval", fn=self.update_params, stream_every=5, outputs=params)
 
         # erase control
         with gr.Accordion(label="🚨🚨🚨Danger zone🚨🚨🚨", open=False):
@@ -194,6 +211,12 @@ class MsenseController():
 
         bt_search.click(self.get_available_devices_checkbox, inputs=text, outputs=available_devices)    
 
+    def update_params(self):
+        tic = time.time()
+        funny = "".join(["✅" for i in range(int(tic)%5)])
+        self.params['Test']['type'] = f"{funny} {tic}"
+        return self.params
+
     def set_auto_reconnect(self, status):
         self.auto_reconnect = status
 
@@ -216,8 +239,9 @@ class MsenseController():
         for name, p in self.active_devices.items():
             print(name, p.is_connected(), p.is_connectable())
             self.collection_ctl(name, True)
-
             self.active_outlets[name].log_dir = self.log_dir
+
+        return gr.CheckboxGroup(choices=[f"✅ {name}" for name in self.active_devices.keys()])
 
     def end_collection(self):
         gr.Info("🛑 Stop data collection...")
