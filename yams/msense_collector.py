@@ -18,7 +18,7 @@ yams_dir = "yams-data"
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
         self.name = name.replace(':', '-')
-        info = StreamInfo(name, "MotionSenSE", 2, 0.5, "float32", peripheral.address())
+        info = StreamInfo(name, "MotionSenSE", 3, 0.5, "float32", peripheral.address())
         super().__init__(info, chunk_size, max_buffered)
 
         self.log_dir = os.path.join(yams_dir, "default")
@@ -35,7 +35,6 @@ class MsenseOutlet(StreamOutlet):
         if not os.path.exists(self.log_path):
             with open(self.log_path, 'w') as f: pass
 
-        data.append(time.time())
         # Append NumPy array as a line
         with open(self.log_path, 'a') as f:
             np.savetxt(f, [data], fmt='%s')
@@ -47,6 +46,7 @@ class MsenseOutlet(StreamOutlet):
         fun_msg = "".join(["✅" for i in range(int(time.time())%10)])
         self.msg_fun = f"📻 {self.tic()} {fun_msg}"
 
+        x.append(time.time())
         super().push_sample(x)
         self.save_data(x)
 
