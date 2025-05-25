@@ -15,6 +15,10 @@ import logging
 
 yams_dir = "yams-data"
 
+def session_manager_interface():
+    sub_list = gr.Text("sub-Test")
+    ses_list = gr.Text("ses-Demo")
+
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
         self.name = name.replace(':', '-')

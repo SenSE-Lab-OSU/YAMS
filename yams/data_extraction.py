@@ -12,6 +12,59 @@ import numpy as np
 import numpy
 from datetime import datetime, UTC
 import gradio as gr
+import zipfile
+import tempfile
+
+def data_extraction_pro_interface():
+    in_file = gr.File(file_types=[".zip"])
+    out = gr.DownloadButton(label="🎉Download data", interactive=True)
+
+    in_file.change(extract_zip, inputs=in_file, outputs=out)
+
+    with gr.Accordion(label="Help", open=False):
+        gr.Markdown("## Data extraction pro mode")
+
+def extract_zip(zip_path):
+    df = get_session_encoding()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        print(zip_path)
+        print(tmpdir)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(tmpdir)
+
+        print("Contents:", os.listdir(tmpdir))
+        devices = os.listdir(tmpdir)
+        for dev in devices:
+            in_dir = os.path.join(tmpdir, dev)
+            print("Before extraction contents:", os.listdir(in_dir))
+    
+            main(in_dir, in_dir, legacy_fs=False, df=df, note=dev)
+            print("After extraction contents:", os.listdir(in_dir))
+
+        out_zip_path = os.path.join(tempfile.gettempdir(),
+                                   os.path.basename(zip_path).replace('.zip', '_extracted.zip'))
+        print(f"output will be saved to {out_zip_path}")
+
+        with zipfile.ZipFile(out_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, start=tmpdir)
+                    zipf.write(file_path, arcname)
+
+
+    return gr.DownloadButton(label="🎉Download data", value=out_zip_path, interactive=True)
+
+def get_session_encoding():
+    if os.path.exists("./yams-data/session_table.csv"):
+            df = pd.read_csv("./yams-data/session_table.csv")
+    else:
+        df = pd.DataFrame(data={
+            'subject_id': ["sub-Test"],
+            "session_id": ["ses-01"],
+            "participant_encoding": [123]
+        })
+    return df
 
 def data_extraction_interface():
     # in_files = gr.File(file_count="multiple")
@@ -25,14 +78,7 @@ def data_extraction_interface():
     btn = gr.Button("Extract raw data")
 
     with gr.Accordion("Encoding mapping"):
-        if os.path.exists("./data/session_table.csv"):
-            df = pd.read_csv("./data/session_table.csv")
-        else:
-            df = pd.DataFrame(data={
-                'subject_id': ["sub-4001"],
-                "session_id": ["ses-01"],
-                "participant_encoding": [123]
-            })
+        df = get_session_encoding()
         dataframe = gr.DataFrame(value=df)
 
     btn.click(main, inputs=[in_dir, out_dir, legacy_fs, dataframe, note])
@@ -48,7 +94,11 @@ class DataExtractor():
         self.note = note
 
         self.df = df
-        self.encoding_alias = self.get_encoding_alias()
+
+        if self.df is not None:
+            self.encoding_alias = self.get_encoding_alias()
+        else:
+            self.encoding_alias = {}
 
         print(f"sampling tick set to {self.sample_tick}")
 
@@ -59,7 +109,7 @@ class DataExtractor():
         with open(os.path.join(self.out_dir, "README.txt"), "w") as file:
             file.write(f"Raw data directory = {self.in_dir}\n")
             file.write(f"Legacy sampling rate = {legacy_fs} (True: 25 Hz, False: 32 Hz)\n")
-            file.write(f"\nMore MotionSenSE utility available at https://github.com/SenSE-Lab-OSU/YAMS\n")
+            file.write(f"\I m-sense with YAMS at https://github.com/SenSE-Lab-OSU/YAMS\n")
 
         self.ppg_labels = ["ir1", "ir2", "g1", "g2",  "Timestamp", "Counter"]
         self.ppg_formats = ["<i", "<i", "<i", "<i", "<i", "<i"]
@@ -331,7 +381,7 @@ def main(in_dir, out_dir, legacy_fs=False, df=None, note="", gradio=True):
     extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs, df=df, note=note)
     extractor.run()
 
-    print(df.head())
+    if df is not None: print(df.head())
 
     if gradio: gr.Info("✅ Extraction completed")
     print("operation completed.")

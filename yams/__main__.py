@@ -3,8 +3,8 @@ from yams.uuid_extractor import uuid_extractor_interface, device_manager_interfa
 from yams.bt_scanner import bt_scanner_interface
 from yams.file_extractor import file_extractor_interface
 from yams.data_explorer import DataExplorer
-from yams.data_extraction import data_extraction_interface
-from yams.msense_collector import MsenseController
+from yams.data_extraction import data_extraction_interface, data_extraction_pro_interface
+from yams.msense_collector import MsenseController, session_manager_interface
 
 def main():
     with gr.Blocks(title="YAMS") as demo:
@@ -22,8 +22,13 @@ def main():
             data_explorer.interface()
         with gr.Tab("🛠️ Data extractor"):
             data_extraction_interface()
-        with gr.Tab("📒 Device manager"):
-            device_manager_interface()
+        with gr.Tab("🛠️ Data extractor pro"):
+            data_extraction_pro_interface()
+        with gr.Tab("📒 Extensions"):
+            with gr.Accordion(label="📒 Device manager"):
+                device_manager_interface()
+            with gr.Accordion(label="📊 Session manager"):
+                session_manager_interface()
         
 
         gr.Markdown(
