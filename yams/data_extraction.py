@@ -17,7 +17,7 @@ import tempfile
 
 def data_extraction_pro_interface():
     in_file = gr.File(file_types=[".zip"])
-    out = gr.DownloadButton(label="🎉Download data", interactive=True)
+    out = gr.DownloadButton(label="No data to be downloaded", interactive=False)
 
     in_file.change(extract_zip, inputs=in_file, outputs=out)
 
@@ -26,34 +26,35 @@ def data_extraction_pro_interface():
 
 def extract_zip(zip_path):
     df = get_session_encoding()
-    with tempfile.TemporaryDirectory() as tmpdir:
-        print(zip_path)
-        print(tmpdir)
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(tmpdir)
+    if zip_path is not None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            print(zip_path)
+            print(tmpdir)
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(tmpdir)
 
-        print("Contents:", os.listdir(tmpdir))
-        devices = os.listdir(tmpdir)
-        for dev in devices:
-            in_dir = os.path.join(tmpdir, dev)
-            print("Before extraction contents:", os.listdir(in_dir))
-    
-            main(in_dir, in_dir, legacy_fs=False, df=df, note=dev)
-            print("After extraction contents:", os.listdir(in_dir))
+            print("Contents:", os.listdir(tmpdir))
+            devices = os.listdir(tmpdir)
+            for dev in devices:
+                in_dir = os.path.join(tmpdir, dev)
+                print("Before extraction contents:", os.listdir(in_dir))
+        
+                main(in_dir, in_dir, legacy_fs=False, df=df, note=dev)
+                print("After extraction contents:", os.listdir(in_dir))
 
-        out_zip_path = os.path.join(tempfile.gettempdir(),
-                                   os.path.basename(zip_path).replace('.zip', '_extracted.zip'))
-        print(f"output will be saved to {out_zip_path}")
+            out_zip_path = os.path.join(tempfile.gettempdir(),
+                                    os.path.basename(zip_path).replace('.zip', '_extracted.zip'))
+            print(f"output will be saved to {out_zip_path}")
 
-        with zipfile.ZipFile(out_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(tmpdir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, start=tmpdir)
-                    zipf.write(file_path, arcname)
-
-
-    return gr.DownloadButton(label="🎉Download data", value=out_zip_path, interactive=True)
+            with zipfile.ZipFile(out_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(tmpdir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, start=tmpdir)
+                        zipf.write(file_path, arcname)
+        return gr.DownloadButton(label="🎉Download data", value=out_zip_path, interactive=True)
+    else:
+        return gr.DownloadButton(label="No data to be downloaded", interactive=False)
 
 def get_session_encoding():
     if os.path.exists("./yams-data/session_table.csv"):
