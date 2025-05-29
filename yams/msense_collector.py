@@ -8,7 +8,7 @@ import struct
 from functools import partial
 from apscheduler.schedulers.background import BackgroundScheduler
 import hashlib
-from pylsl import StreamInfo, StreamOutlet
+from pylsl import StreamInfo, StreamOutlet, cf_double64
 import os, sys
 import numpy as np
 import logging
@@ -22,7 +22,7 @@ def session_manager_interface():
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
         self.name = name.replace(':', '-')
-        info = StreamInfo(name, "MotionSenSE", 3, 2, "float64", peripheral.address())
+        info = StreamInfo(name, "MotionSenSE", 3, 2, cf_double64, peripheral.address())
         super().__init__(info, chunk_size, max_buffered)
 
         self.log_dir = os.path.join(yams_dir, "default")
