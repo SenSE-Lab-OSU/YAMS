@@ -22,7 +22,7 @@ def session_manager_interface():
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
         self.name = name.replace(':', '-')
-        info = StreamInfo(name, "MotionSenSE", 3, 0.5, "float32", peripheral.address())
+        info = StreamInfo(name, "MotionSenSE", 3, 2, "float64", peripheral.address())
         super().__init__(info, chunk_size, max_buffered)
 
         self.log_dir = os.path.join(yams_dir, "default")
