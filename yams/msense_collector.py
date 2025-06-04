@@ -369,7 +369,7 @@ class MsenseController():
             self.logger.info("Stopped device monitor job")
 
     def get_participant_encoding(self, sub, ses):
-        name = f"{sub}-{ses}"
+        name = f"{sub}_{ses}"
         hash_object = hashlib.sha256(name.encode())
         hex_digest = hash_object.hexdigest()
         integer_representation = int(hex_digest, 16) % 32000
