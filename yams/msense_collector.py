@@ -116,9 +116,10 @@ class MsenseController():
             if filter_name in peripheral.identifier():
                 self.logger.info(f"{i}: {peripheral.identifier()} [{peripheral.address()}]")
                 # try to look up device alias
-                if peripheral.address() in self.device_name.keys():
-                    alias = self.device_name[peripheral.address()]
-                    name = f"{peripheral.identifier()} ({alias}) [{peripheral.address()}]"
+                addr = peripheral.address().upper()
+                if addr in self.device_name.keys():
+                    alias = self.device_name[addr]
+                    name = f"{alias} ({peripheral.identifier()}) [{peripheral.address()}]"
                 else:
                     name = f"{peripheral.identifier()} [{peripheral.address()}]"
 

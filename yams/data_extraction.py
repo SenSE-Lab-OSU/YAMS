@@ -63,7 +63,7 @@ def get_session_encoding():
         df = pd.DataFrame(data={
             'subject_id': ["sub-Test"],
             "session_id": ["ses-01"],
-            "participant_encoding": [123]
+            "encoding": [123]
         })
     return df
 
