@@ -80,12 +80,17 @@ def update_download(output_name):
     global device_info
     return save_device_info(output_name)
 
+
+def get_attached_drive():
+    dropdown, _ = get_flash_drives()
+    return dropdown
+
 def uuid_extractor_interface():
     with gr.Column():
         with gr.Row():
             msense_path = gr.Dropdown(label="📁 MotionSenSE path", allow_custom_value=True)
             refreash_path_btn = gr.Button("🔄 Refresh")
-            refreash_path_btn.click(get_flash_drives, outputs=msense_path)
+            refreash_path_btn.click(get_attached_drive, outputs=msense_path)
         extract_btn = gr.Button("🔧 Get UUID")
 
     with gr.Column():
