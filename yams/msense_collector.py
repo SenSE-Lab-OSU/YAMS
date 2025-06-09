@@ -301,6 +301,15 @@ class MsenseController():
         characteristic_uuid = "da39c951-1d81-48e2-9c68-d0ae4bbd351f"
         contents = peripheral.notify(service_uuid, characteristic_uuid, lambda data: self.enmo_handler(data, peripheral, name))
 
+    def get_battery_status(self, names):
+        for n in names:
+            peripheral = self.devices[n]
+
+            service_uuid = "0000180f-0000-1000-8000-00805f9b34fb"
+            characteristic_uuid = "00002a19-0000-1000-8000-00805f9b34fb"
+            contents = peripheral.read(service_uuid, characteristic_uuid)
+            print(n, f"battery = {str(contents[0])}")
+
     def enmo_handler(self, data, peripheral, name):
         # print(peripheral.identifier(), data)
         packet_counter = data[4:6]
@@ -318,6 +327,7 @@ class MsenseController():
             p = self.devices[n]
             print(f'======== Services of device {n}')
             self.get_services(p)
+        self.get_battery_status(names)
 
     def get_services(self, peripheral):
         services = peripheral.services()
