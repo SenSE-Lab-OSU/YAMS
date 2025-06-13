@@ -108,6 +108,7 @@ class MsenseController():
     def scan_devices(self, filter_name="MSense"):
         print("start scanning devices")
         self.logger.info("start device scanning")
+        self.ctl_state = "Start device scanning"
         self.adapter.scan_for(5000)
         peripherals = self.adapter.scan_get_results()
 
@@ -125,12 +126,14 @@ class MsenseController():
 
                 self.devices[name] = peripheral
 
+        self.ctl_state = "Device scanning completed"
 
     def connect_devices(self, names):
         del(self.active_devices)
         self.active_devices = {}
         del(self.active_outlets)
         self.active_outlets = {}
+        self.ctl_state = "Start device connection"
 
         self.logger.info(f"Start connecting to devices: {names}")
         for n in names:
@@ -144,7 +147,10 @@ class MsenseController():
             self.active_devices[n] = p
             self.active_outlets[n] = MsenseOutlet(n, p)
 
+        self.ctl_state = "Device(s) connected"
+
     def disconnect_all(self):
+        self.ctl_state = "Start device disconnection"
         for dev in self.active_devices.values():
             try:
                 dev.disconnect()
@@ -152,6 +158,7 @@ class MsenseController():
                 print(str(e))
         gr.Warning(f"All devices disconnected")
         self.logger.info("All devices disconnected")
+        self.ctl_state = "Device(s) disconnected"
 
     def tic(self):
         return datetime.datetime.now()
@@ -183,16 +190,16 @@ class MsenseController():
                 ses_name.change(self.get_participant_encoding, inputs=[sub_name, ses_name], outputs=subject_enc)
         
             with gr.Row():
-                btn_start = gr.Button("Start▶️")
-                btn_stop = gr.Button("Stop🛑")
-                
-            btn_start.click(self.start_collection)
-            btn_stop.click(self.end_collection)
-
+                self.btn_start = gr.Button("Start▶️")
+                self.btn_stop = gr.Button("Stop🛑")
+                                
+            self.btn_start.click(self.start_collection)
+            self.btn_stop.click(self.end_collection)
 
         self.params = {}
+        self.ctl_state = "Welcome! Press 'Search bluetooth devices' to start"
         params = gr.ParamViewer(self.params)
-        timer = gr.Timer(value=3)
+        timer = gr.Timer(value=1)
         timer.tick(fn=self.update_params, outputs=params)
 
         # erase control
@@ -227,7 +234,9 @@ class MsenseController():
         bt_search.click(self.get_available_devices_checkbox, inputs=text, outputs=available_devices)    
 
     def update_params(self):
-        self.params = {}
+        self.params = {"Memo": {
+            'type': self.ctl_state,
+        }}
         for name, device in self.active_devices.items():
             connection_status = "✅ Connected" if device.is_connected() else "🚫 Disconnected"
             self.params[name] = {
@@ -261,12 +270,16 @@ class MsenseController():
             self.collection_ctl(name, True)
             self.active_outlets[name].log_dir = self.log_dir
 
+        self.ctl_state = "Collection in progress"
+
     def end_collection(self):
         gr.Info("🛑 Stop data collection...")
         self.logger.info("Data collection stopped")
         for name, p in self.active_devices.items():
             print(name, p.is_connected(), p.is_connectable())
             self.collection_ctl(name, False)
+
+        self.ctl_state = "Collection stopped"
     
     def collection_ctl(self, name, start=True):
         peripheral = self.active_devices[name]
@@ -409,6 +422,7 @@ class MsenseController():
         
     def erase_flash_data(self):
         gr.Info("Erasing flash data...")
+        self.ctl_state = "Erase in progress"
         self.logger.info("Erasing flash data...")
 
         service_uuid = "da39c930-1d81-48e2-9c68-d0ae4bbd351f"
@@ -421,4 +435,11 @@ class MsenseController():
                 self.logger.error(str(e))
                 gr.Error(f"⚠️{str(e)}")
         self.logger.info("Erase completed")
+
+        del(self.active_devices)
+        self.active_devices = {}
+        del(self.active_outlets)
+        self.active_outlets = {}
+
+        self.ctl_state = "Wait for device lights out and press 'Search bluetooth devices' to restart"
         return gr.Number(value=None, label="Erase code"), gr.Checkbox(label="Enable erase feature", value=False), gr.Button("Erase flash data", interactive=False)
