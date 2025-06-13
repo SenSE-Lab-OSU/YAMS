@@ -20,14 +20,20 @@ def session_manager_interface():
     ses_list = gr.Text("ses-Demo")
 
 class MsenseOutlet(StreamOutlet):
-    def __init__(self, name, peripheral, chunk_size=32, max_buffered=360):
+    def __init__(self, name, peripheral, chunk_size=32, max_buffered=360, use_lsl=True):
         self.name = name.replace(':', '-')
-        info = StreamInfo(name, "MotionSenSE", 3, 2, cf_double64, peripheral.address())
-        super().__init__(info, chunk_size, max_buffered)
+        self.use_lsl = use_lsl
+
+        lsl_status = "OK" if self.use_lsl else "disabled"
+        self.msg = f"📻 {self.tic()} LSL {lsl_status}. Ready to start..."
+        self.msg_fun = f"📻 {self.tic()} LSL {lsl_status}. Ready to start..."
+
+        if self.use_lsl:
+            info = StreamInfo(name, "MotionSenSE", 3, 2, cf_double64, peripheral.address())
+            super().__init__(info, chunk_size, max_buffered)
 
         self.log_dir = os.path.join(yams_dir, "default")
-        self.msg = f"📻 {self.tic()} LSL OK. Ready to start..."
-        self.msg_fun = f"📻 {self.tic()} LSL OK. Ready to start..."
+
 
     def tic(self):
         now = datetime.datetime.now()
@@ -44,14 +50,16 @@ class MsenseOutlet(StreamOutlet):
             np.savetxt(f, [data], fmt='%s')
 
     def push_sample(self, x):
-        formatted = '\t'.join(str(num) for num in x)
-        self.msg = f"📻 {self.tic()} last LSL pushed: {formatted}"
-        
-        fun_msg = "".join(["✅" for i in range(int(time.time())%10)])
-        self.msg_fun = f"📻 {self.tic()} {fun_msg}"
+        if self.use_lsl:
+            formatted = '\t'.join(str(num) for num in x)
+            self.msg = f"📻 {self.tic()} last LSL pushed: {formatted}"
+            
+            fun_msg = "".join(["✅" for i in range(int(time.time())%10)])
+            self.msg_fun = f"📻 {self.tic()} {fun_msg}"
 
-        x.append(time.time())
-        super().push_sample(x)
+            x.append(time.time())
+            super().push_sample(x)
+            
         self.save_data(x)
 
 class MsenseController():
@@ -145,7 +153,7 @@ class MsenseController():
             p.set_callback_on_disconnected(lambda: self.logger.info(f"{n} {p.identifier()} is disconnected"))
             p.connect()
             self.active_devices[n] = p
-            self.active_outlets[n] = MsenseOutlet(n, p)
+            self.active_outlets[n] = MsenseOutlet(n, p, use_lsl=self.use_lsl)
 
         self.ctl_state = "Device(s) connected"
 
@@ -214,6 +222,9 @@ class MsenseController():
             erase_enable.change(self.set_erase_feature, inputs=[erase_enable, erase_passcode], outputs=[erase_btn])
 
         with gr.Accordion(label="Advanced options", open=False):
+            use_lsl = gr.Checkbox(True, label="Enable LSL")
+            use_lsl.change(self.update_lsl_setting, inputs=use_lsl)
+
             text = gr.Text("MSense", label="Device filter", scale=2)
 
             auto_reconnect = gr.Checkbox(True, label="Auto reconnect")
@@ -232,6 +243,9 @@ class MsenseController():
                 btn_monitor_stop.click(self.stop_device_monitor)
 
         bt_search.click(self.get_available_devices_checkbox, inputs=text, outputs=available_devices)    
+
+    def update_lsl_setting(self, enable):
+        self.use_lsl = enable
 
     def update_params(self):
         self.params = {"Memo": {
