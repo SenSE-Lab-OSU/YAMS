@@ -12,12 +12,40 @@ from pylsl import StreamInfo, StreamOutlet, cf_double64
 import os, sys
 import numpy as np
 import logging
+import re
+from yams.config import __version__
 
 yams_dir = "yams-data"
 
 def session_manager_interface():
     sub_list = gr.Text("sub-Test")
     ses_list = gr.Text("ses-Demo")
+
+def participant_encoding_legacy(sub, ses):
+    name = f"{sub}_{ses}"
+
+    hash_object = hashlib.sha256(name.encode())
+    hex_digest = hash_object.hexdigest()
+    integer_representation = int(hex_digest, 16) % 32000
+    return integer_representation
+
+def participant_encoding_default(sub, ses):
+    sub_number = re.search(r'\d+', sub)
+    if sub_number:
+        sub_number = sub_number.group()
+    else:
+        sub_number = 0
+
+    ses_number = re.search(r'\d+', ses)
+    if ses_number:
+        ses_number = ses_number.group()
+    else:
+        ses_number = 0
+
+    integer_representation = int(sub_number) * 100 + int(ses_number)
+    # print(sub_number, ses_number, integer_representation)
+
+    return integer_representation
 
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360, use_lsl=True):
@@ -59,7 +87,7 @@ class MsenseOutlet(StreamOutlet):
 
             x.append(time.time())
             super().push_sample(x)
-            
+
         self.save_data(x)
 
 class MsenseController():
@@ -77,7 +105,7 @@ class MsenseController():
                                 logging.FileHandler(os.path.join(yams_dir, f"{date}_yams_session.log")),
                                 logging.StreamHandler()
                             ])
-        self.logger.info(f"Start YAMS session log")
+        self.logger.info(f"Begin YAMS v{__version__} session log")
     
         self.auto_reconnect = True
         self.devices = {}
@@ -87,6 +115,8 @@ class MsenseController():
         self.active_outlets = {}
 
         self.scheduler = BackgroundScheduler()
+
+        self.update_encoding_mode("Default")
 
     def get_dev_dict(self):
         try:
@@ -187,7 +217,7 @@ class MsenseController():
         btn_disconnect.click(self.disconnect_all)
 
         with gr.Accordion(label="Device control", open=True):
-            default_sub = "sub-Test"
+            default_sub = "sub-1000"
             default_ses = "ses-00"
 
             with gr.Row():
@@ -223,6 +253,7 @@ class MsenseController():
 
         with gr.Accordion(label="Advanced options", open=False):
             use_lsl = gr.Checkbox(True, label="Enable LSL")
+            self.use_lsl = True
             use_lsl.change(self.update_lsl_setting, inputs=use_lsl)
 
             text = gr.Text("MSense", label="Device filter", scale=2)
@@ -242,7 +273,37 @@ class MsenseController():
                 btn_monitor_start.click(self.start_device_monitor)
                 btn_monitor_stop.click(self.stop_device_monitor)
 
+            with gr.Accordion(label="Participant encoding", open=False):
+                with gr.Row():
+                    manual_encoding = gr.Number(12345)
+                    enc_mode = gr.Radio(["Default", "Legacy (hash-based)"], value="Default", label="Encoding mode")
+                with gr.Row():
+                    btn_write_enc = gr.Button("write enc")
+                    btn_read_enc = gr.Button("read enc")
+
+                enc_mode.change(self.update_encoding_mode, inputs=enc_mode)
+                btn_write_enc.click(self.write_enc, inputs=manual_encoding)
+
         bt_search.click(self.get_available_devices_checkbox, inputs=text, outputs=available_devices)    
+
+    def write_enc(self, enc):
+        for name, peripheral in self.active_devices.items():
+            peripheral.write_request("da39c930-1d81-48e2-9c68-d0ae4bbd351f",
+                                     "da39c933-1d81-48e2-9c68-d0ae4bbd351f", 
+                                       struct.pack("<I", int(enc)))
+            
+            data = peripheral.read("da39c930-1d81-48e2-9c68-d0ae4bbd351f",
+                                     "da39c933-1d81-48e2-9c68-d0ae4bbd351f", 
+                                    )
+            # print(name, data, f"enc = {str(data)}")
+            print(name, data, struct.unpack("<I", data))
+
+    def update_encoding_mode(self, enc_mode):
+        print(enc_mode)
+        if enc_mode == "Legacy (hash-based)":
+            self.encode_participant = participant_encoding_legacy
+        elif enc_mode == "Default":
+            self.encode_participant = participant_encoding_default
 
     def update_lsl_setting(self, enable):
         self.use_lsl = enable
@@ -407,13 +468,10 @@ class MsenseController():
             self.logger.info("Stopped device monitor job")
 
     def get_participant_encoding(self, sub, ses):
-        name = f"{sub}_{ses}"
-        hash_object = hashlib.sha256(name.encode())
-        hex_digest = hash_object.hexdigest()
-        integer_representation = int(hex_digest, 16) % 32000
+        integer_representation = self.encode_participant(sub, ses)
+
         # print(name, integer_representation)
         self.participant_byte = struct.pack("<I", integer_representation)
-
         self.session_info = {
             'sub_id': sub,
             'ses_id': ses,

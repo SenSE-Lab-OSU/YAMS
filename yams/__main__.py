@@ -5,6 +5,7 @@ from yams.file_extractor import file_extractor_interface
 from yams.data_explorer import DataExplorer
 from yams.data_extraction import data_extraction_interface, data_extraction_pro_interface
 from yams.msense_collector import MsenseController, session_manager_interface
+from yams.config import __version__
 
 def main():
     with gr.Blocks(title="YAMS") as demo:
@@ -32,7 +33,7 @@ def main():
         
 
         gr.Markdown(
-            "[YAMS](https://github.com/SenSE-Lab-OSU/YAMS): Yet Another MotionSenSE Service utility",
+            f"[YAMS](https://github.com/SenSE-Lab-OSU/YAMS) v{__version__}: Yet Another MotionSenSE Service utility",
             elem_id="footer"
         )
 
