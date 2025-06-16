@@ -9,6 +9,153 @@ import tempfile
 import psutil
 import re
 import json
+from datetime import datetime
+
+class FileDownloader():
+    def __init__(self):
+        self.all_files = []
+
+    def interface(self):
+        with gr.Row():
+            msense_group = gr.CheckboxGroup(label="📁 MotionSenSE path")
+            msense_path = gr.Dropdown(label="📁 Custom MotionSenSE path", allow_custom_value=True)
+            refreash_path_btn = gr.Button("🔄 Refresh / Start over")
+
+        file_explorer_btn = gr.Button("Browse session")
+
+        enc_table = gr.CheckboxGroup(label="Available session")
+
+        file_explorer_btn.click(self.get_available_files, 
+                                inputs=[msense_path, msense_group],
+                                outputs=enc_table)
+
+        download_btn2 = gr.Button("Get selected sessions 📂")
+
+        label = gr.Text("", label="(Optional) Note", visible=False)
+        
+        extract_btn = gr.Button("Get Files 📂", visible=False)
+        confirm_btn = gr.Button("", visible=False)
+
+        info_panel = gr.Text(label='Status')
+
+        download_btn = default_refresh_btn()
+
+        download_btn2.click(self.download_selected_files, inputs=enc_table, outputs=[info_panel, download_btn])
+
+        extract_btn.click(prompt_device_name, outputs=[label, confirm_btn, extract_btn])
+
+        confirm_btn.click(get_msense_files, inputs=[msense_path, msense_group, label], outputs=[info_panel, download_btn])
+        refreash_path_btn.click(interface_refresh_reset, outputs=[msense_path, msense_group, download_btn,
+                                                        label,
+                                                        extract_btn,
+                                                        confirm_btn])
+        
+    def download_selected_files(self, enc_list):
+        all_matched = {}
+        for src_path, src_files in self.all_files.items():
+            matched_files = []
+            mac_addr = f"dev-{time.strftime("%y%m%d%H%M")}"
+            for file in src_files:
+                f = os.path.basename(file)
+
+                # include uuid.txt and mac addr
+                if f.endswith("uuid.txt"): 
+                    matched_files.append(file)
+
+                    mac_pattern = r'(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}'
+                    with open(file, 'r') as uuid_file:
+                        content = uuid_file.read()
+                        mac_addr = re.findall(mac_pattern, content)
+                        if len(mac_addr) > 0: mac_addr = mac_addr[0]
+                    continue
+
+                # include bin file with desired encoding prefixed
+                if any(f.startswith(enc) for enc in enc_list) and f.endswith('.bin'):
+                    matched_files.append(file)
+
+            all_matched[mac_addr] = matched_files
+            print(all_matched)
+
+        # start copying
+        with tempfile.TemporaryDirectory() as dst_dir:
+            print(dst_dir)
+            num_src_dirs = len(all_matched.keys())
+            for i, (dev_name, file_list) in enumerate(all_matched.items()):
+                gr.Info(f"Start file extraction {i+1} / {num_src_dirs}...")
+                progress = gr.Progress()
+                progress(0, desc=f"Start copying {len(file_list)} files for drive {i+1} / {num_src_dirs}...")
+
+                os.makedirs(os.path.join(dst_dir, dev_name))
+
+                for src_path in progress.tqdm(file_list, desc=f"copying data {i+1} / {num_src_dirs}... consider getting a coffee..."):
+                    dst_path = os.path.join(dst_dir, dev_name, os.path.basename(src_path))
+                    print(src_path, dst_path)
+                    shutil.copy(src_path, dst_path)
+
+            # zipping up
+            zip_filename = os.path.join(tempfile.gettempdir(), "test.zip")
+            with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, _, files in os.walk(dst_dir):
+                    for file in files:
+                        full_path = os.path.join(root, file)
+                        arcname = os.path.relpath(full_path, dst_dir)
+                        zipf.write(full_path, arcname=arcname)
+
+            return "OK", gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
+
+
+    def get_available_files(self, src_path, src_path_grp):
+        # merge input directories
+        print(src_path, src_path_grp)
+        if src_path not in src_path_grp and src_path != '' and src_path: src_path_grp.append(src_path) 
+        print('=====', src_path_grp)
+
+        # file_info = {}
+        file_info = []
+        all_encoding = set() 
+
+        self.all_files = {}
+
+        progress = gr.Progress()
+
+        for i, src_path in enumerate(src_path_grp):
+            file_list = sorted(glob(os.path.join(src_path, '*.bin')))
+            # print(file_list)
+
+            self.all_files[src_path] = file_list
+
+            progress(0, desc=f"Start copying {len(file_list)} files for drive {i+1} / {len(src_path_grp)}...")
+
+            for f in file_list:
+                f = os.path.basename(f)
+                if 'ac' in f:
+                    match = re.match(r'(?:(\d+))?ac(\d+)\.bin$', f)
+                    if match:
+                        encoding = match.group(1)  # can be None
+                        timestamp = int(match.group(2))
+
+                        # Convert to local time
+                        dt = datetime.fromtimestamp(timestamp)
+                        timestamp = dt.strftime('%m/%d/%y')
+
+                        # quick way to determine encoding technique
+                        if int(encoding) > 32000:
+                            sub = encoding[:-2]
+                            ses = encoding[-2:]
+                            # print(f"sub={sub}, ses={ses}")
+                            alias = f"sub-{sub}, ses-{ses} ({timestamp})"
+                        else:
+                            alias = f"{encoding} ({timestamp})"
+
+                        if encoding not in all_encoding:
+                            all_encoding.add(encoding)
+
+                        # file_info[alias] = encoding
+                        file_info.append((alias, encoding))
+
+        return gr.CheckboxGroup(file_info)
+
+
 
 def create_zip(filename, file_paths):
     temp_dir = tempfile.gettempdir()
@@ -32,7 +179,7 @@ def get_flash_drives():
 
 def interface_refresh_reset():
     dropdown, checkboxes = get_flash_drives()
-    return dropdown, checkboxes, default_refresh_btn(), gr.Text("1", label="(Optional) Note", visible=False), gr.Button("Get Files 📂", visible=True), gr.Button("", visible=False)
+    return dropdown, checkboxes, default_refresh_btn(), gr.Text("1", label="(Optional) Note", visible=False), gr.Button("Get Files 📂", visible=False), gr.Button("", visible=False)
 
 def get_device_info(file_path="device_info.json"):
     if not os.path.exists(file_path):
@@ -65,6 +212,56 @@ def combine_zips(src_path_list, output_zip_path):
                         output_zip.writestr(new_path, src_file.read())
         
         for zip_path in src_path_list: copy_from(zip_path, os.path.basename(zip_path).replace('.zip', ''))
+
+
+def get_available_files(src_path, src_path_grp):
+    # merge input directories
+    print(src_path, src_path_grp)
+    if src_path not in src_path_grp and src_path != '' and src_path: src_path_grp.append(src_path) 
+    print('=====', src_path_grp)
+
+    # file_info = {}
+    file_info = []
+    all_encoding = set() 
+
+    for i, src_path in enumerate(src_path_grp):
+        file_list = sorted(glob(os.path.join(src_path, '*.bin')))
+        # print(file_list)
+
+        for f in file_list:
+            f = os.path.basename(f)
+            if 'ac' in f:
+                match = re.match(r'(?:(\d+))?ac(\d+)\.bin$', f)
+                if match:
+                    encoding = match.group(1)  # can be None
+                    timestamp = int(match.group(2))
+
+                    # Convert to local time
+                    dt = datetime.fromtimestamp(timestamp)
+                    timestamp = dt.strftime('%m/%d/%y')
+
+                    # quick way to determine encoding technique
+                    if int(encoding) > 32000:
+                        sub = encoding[:-2]
+                        ses = encoding[-2:]
+                        print(f"sub={sub}, ses={ses}")
+                        alias = f"sub-{sub}, ses-{ses} ({timestamp})"
+                    else:
+                        alias = f"{encoding} ({timestamp})"
+
+                    if encoding not in all_encoding:
+                        all_encoding.add(encoding)
+
+                    # file_info[alias] = encoding
+                    file_info.append((alias, encoding))
+
+            # info = f"Enc={encoding}, Date={timestamp}, {f}"
+            # print(number1, number2)
+            # print(info)
+    return gr.CheckboxGroup(file_info)
+            
+            
+
 
 def get_msense_files(src_path, src_path_grp, label):
     # if label == "":
@@ -125,18 +322,35 @@ def get_msense_files(src_path, src_path_grp, label):
     gr.Info(f"File ready")
     return f"Successfully extracted {len(file_list)} to {os.path.basename(zip_path)}", gr.DownloadButton(label="🎉Download data", value=combined_zip_path, interactive=True)
 
+def download_selected_files(session_table):
+    print(session_table)
+
+
 def file_extractor_interface():
-    with gr.Column():
-        with gr.Row():
-            msense_group = gr.CheckboxGroup(label="📁 MotionSenSE path")
-            msense_path = gr.Dropdown(label="📁 Custom MotionSenSE path", allow_custom_value=True)
-            refreash_path_btn = gr.Button("🔄 Refresh / Start over")
+    with gr.Row():
+        msense_group = gr.CheckboxGroup(label="📁 MotionSenSE path")
+        msense_path = gr.Dropdown(label="📁 Custom MotionSenSE path", allow_custom_value=True)
+        refreash_path_btn = gr.Button("🔄 Refresh / Start over")
 
-        label = gr.Text("", label="(Optional) Note", visible=False)
-        extract_btn = gr.Button("Get Files 📂")
-        confirm_btn = gr.Button("", visible=False)
+    file_explorer_btn = gr.Button("Browse data")
 
-        info_panel = gr.Text(label='Status')
+    session_table = gr.CheckboxGroup(label="Available session")
+
+    file_explorer_btn.click(get_available_files, 
+                            inputs=[msense_path, msense_group],
+                            outputs=session_table)
+
+    download_btn2 = gr.Button("Get selected sessions")
+
+    download_btn2.click(download_selected_files, inputs=session_table)
+
+
+    label = gr.Text("", label="(Optional) Note", visible=False)
+    
+    extract_btn = gr.Button("Get Files 📂")
+    confirm_btn = gr.Button("", visible=False)
+
+    info_panel = gr.Text(label='Status')
 
     download_btn = default_refresh_btn()
 
