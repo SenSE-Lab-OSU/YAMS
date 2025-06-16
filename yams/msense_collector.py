@@ -484,12 +484,14 @@ class MsenseController():
         if erase_enable:
             if erase_passcode == 68:
                 gr.Warning("Erase feature is enabled!")
+                self.ctl_state = f"{self.ctl_state} | Erase feature active"
                 return gr.Button("Erase flash data", interactive=True)
             else:
                 gr.Warning("Incorrect password")
                 return gr.Button("Erase flash data", interactive=False)
         else:
             gr.Info("Erase feature disabled")
+            self.ctl_state.replace(" | Erase feature active", "")
             return gr.Button("Erase flash data", interactive=False)
         
     def erase_flash_data(self):

@@ -55,6 +55,7 @@ class FileDownloader():
         for src_path, src_files in self.all_files.items():
             matched_files = []
             mac_addr = f"dev-{time.strftime("%y%m%d%H%M")}"
+            print(src_files)
             for file in src_files:
                 f = os.path.basename(file)
 
@@ -66,7 +67,9 @@ class FileDownloader():
                     with open(file, 'r') as uuid_file:
                         content = uuid_file.read()
                         mac_addr = re.findall(mac_pattern, content)
-                        if len(mac_addr) > 0: mac_addr = mac_addr[0]
+                        if len(mac_addr) > 0: 
+                            mac_addr = mac_addr[0]
+                            mac_addr = look_up_device_name(mac_addr).replace(':', '-')
                     continue
 
                 # include bin file with desired encoding prefixed
@@ -78,7 +81,6 @@ class FileDownloader():
 
         # start copying
         with tempfile.TemporaryDirectory() as dst_dir:
-            print(dst_dir)
             num_src_dirs = len(all_matched.keys())
             for i, (dev_name, file_list) in enumerate(all_matched.items()):
                 gr.Info(f"Start file extraction {i+1} / {num_src_dirs}...")
@@ -93,7 +95,7 @@ class FileDownloader():
                     shutil.copy(src_path, dst_path)
 
             # zipping up
-            zip_filename = os.path.join(tempfile.gettempdir(), "test.zip")
+            zip_filename = os.path.join(tempfile.gettempdir(), f"{time.strftime("%y%m%d%H%M")}_msense.zip")
             with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, _, files in os.walk(dst_dir):
                     for file in files:
@@ -101,7 +103,7 @@ class FileDownloader():
                         arcname = os.path.relpath(full_path, dst_dir)
                         zipf.write(full_path, arcname=arcname)
 
-            return "OK", gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
+            return "File ready", gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
 
 
     def get_available_files(self, src_path, src_path_grp):
@@ -121,6 +123,9 @@ class FileDownloader():
         for i, src_path in enumerate(src_path_grp):
             file_list = sorted(glob(os.path.join(src_path, '*.bin')))
             # print(file_list)
+
+            uuid_list = glob(os.path.join(src_path, '*.txt'))
+            file_list.extend(uuid_list)
 
             self.all_files[src_path] = file_list
 
