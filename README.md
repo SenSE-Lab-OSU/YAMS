@@ -120,6 +120,11 @@ To halt all on-going collection on the MotionSenSE wristbands,
 - [x] simple data collection utilities
 - [x] LSL support
 - [x] Auto reconnect
+- [x] Selected file download
+- [ ] Advanced device monitoring
+    [ ] global state: active connection, active outlet, ctl status
+    [ ] BAT monitoring
+    [ ] storage monitoring
 
 
 ## Acknowledgement

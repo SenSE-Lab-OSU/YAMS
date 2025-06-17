@@ -317,7 +317,7 @@ class MsenseController():
             try:
                 msg_fun = self.active_outlets[name].msg_fun
             except Exception as e:
-                msg_fun = str(e)
+                msg_fun = "LSL outlet unavailable"
 
             try:
                 msg = self.active_outlets[name].msg
