@@ -314,9 +314,19 @@ class MsenseController():
         }}
         for name, device in self.active_devices.items():
             connection_status = "✅ Connected" if device.is_connected() else "🚫 Disconnected"
+            try:
+                msg_fun = self.active_outlets[name].msg_fun
+            except Exception as e:
+                msg_fun = str(e)
+
+            try:
+                msg = self.active_outlets[name].msg
+            except Exception as e:
+                msg = str(e)
+
             self.params[name] = {
-                'type': f"{connection_status} | {self.active_outlets[name].msg_fun}",
-                'description': self.active_outlets[name].msg
+                'type': f"{connection_status} | {msg_fun}",
+                'description': msg
             }
 
         return self.params
