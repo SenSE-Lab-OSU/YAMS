@@ -221,9 +221,10 @@ class MsenseController():
             default_ses = "ses-00"
 
             with gr.Row():
-                sub_name = gr.Text(default_sub, label="Subject ID")
-                ses_name = gr.Text(default_ses, label="Session ID")
-                subject_enc = gr.Number(self.get_participant_encoding(default_sub, default_ses), label='Participant encoding (Read-only)', interactive=False)
+                sub_name = gr.Text(default_sub, label="Subject ID", info="Format: sub-XXXX, X is integer")
+                ses_name = gr.Text(default_ses, label="Session ID", info="Format: ses-YY, Y is integer")
+                subject_enc = gr.Number(self.get_participant_encoding(default_sub, default_ses), label='Participant encoding (Read-only)', interactive=False,
+                                        info="Format: XXXXYY")
                 sub_name.change(self.get_participant_encoding, inputs=[sub_name, ses_name], outputs=subject_enc)
                 ses_name.change(self.get_participant_encoding, inputs=[sub_name, ses_name], outputs=subject_enc)
         
@@ -452,15 +453,15 @@ class MsenseController():
         for name, device in self.active_devices.items():
             try:
                 if not device.is_connected():
-                    self.logger.warning(f"{device.identifier()} disconnected. Attempting to reconnect..")
+                    self.logger.warning(f"{name} {device.identifier()} disconnected. Attempting to reconnect..")
                     device.connect()
                     if device.is_connected():
-                        self.logger.info(f"Reconnected to {device.identifier()}")
+                        self.logger.info(f"Reconnected to {name} {device.identifier()}")
                         self.register_enmo(device, name)
                     else:
-                        self.logger.warning(f"Failed to reconnect to {device.identifier()}")
+                        self.logger.warning(f"Failed to reconnect to {name} {device.identifier()}")
                 else:
-                    self.logger.debug(f"{device.identifier()} is still connected.")
+                    self.logger.debug(f"{name} {device.identifier()} is still connected.")
             except Exception as e:
                 self.logger.error(f"Error checking device {device.identifier()}: {e}")
 
