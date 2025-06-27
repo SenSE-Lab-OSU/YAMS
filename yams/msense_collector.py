@@ -519,7 +519,7 @@ class MsenseController():
             except Exception as e:
                 self.logger.error(str(e))
                 gr.Error(f"⚠️{str(e)}")
-        self.logger.info("Erase completed")
+        self.logger.info("Erase command issued. Wait for device lights out and press ***Search bluetooth devices*** to restart")
 
         del(self.active_devices)
         self.active_devices = {}
