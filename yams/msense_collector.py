@@ -106,6 +106,9 @@ class MsenseController():
                                 logging.StreamHandler()
                             ])
         self.logger.info(f"Begin YAMS v{__version__} session log")
+
+        info = StreamInfo(name="YAMS", type="string", channel_count=1, channel_format="string")
+        self.lsl_journaler = StreamOutlet(info)
     
         self.auto_reconnect = True
         self.devices = {}
@@ -241,8 +244,24 @@ class MsenseController():
         timer = gr.Timer(value=1)
         timer.tick(fn=self.update_params, outputs=params)
 
+        with gr.Accordion(label="🗒️ Journaler", open=False):
+            # with gr.Row():
+            journal_msg = gr.Text(label="Message")
+            journal_examples = gr.Examples(
+                examples=[
+                    ["Task [NAME] started"],
+                    ["Task [NAME] stopped"],
+                    ["Task exception due to [REASON]"],
+                    ["Flag"],
+                ],
+                inputs=journal_msg
+            )
+            btn_send_msg = gr.Button("✍️ Record message")
+
+            btn_send_msg.click(self.send_journal_msg, inputs=journal_msg)
+
         # erase control
-        with gr.Accordion(label="🚨🚨🚨Danger zone🚨🚨🚨", open=False):
+        with gr.Accordion(label="🚨🚨🚨 Danger zone 🚨🚨🚨", open=False):
             erase_passcode = gr.Number(label="Erase code")
             erase_enable = gr.Checkbox(label="Enable erase feature")
             
@@ -286,6 +305,10 @@ class MsenseController():
                 btn_write_enc.click(self.write_enc, inputs=manual_encoding)
 
         bt_search.click(self.get_available_devices_checkbox, inputs=text, outputs=available_devices)    
+
+    def send_journal_msg(self, journal_msg):
+        self.lsl_journaler.push_sample([journal_msg])
+        self.logger.info(f"YAMS JOURNALER: {journal_msg}")
 
     def write_enc(self, enc):
         for name, peripheral in self.active_devices.items():
