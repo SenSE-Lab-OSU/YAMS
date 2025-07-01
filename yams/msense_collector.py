@@ -17,6 +17,15 @@ from yams.config import __version__
 
 yams_dir = "yams-data"
 
+def get_task_list():
+    if os.path.exists("task.txt"):
+        with open('task.txt', 'r') as file:
+            lines = file.readlines()
+        task_list = [line.strip() for line in lines]
+    else:
+        task_list = ["A", "B", "C", "D", "E"]
+    return gr.Dropdown(choices=task_list, label="Task name")
+
 def session_manager_interface():
     sub_list = gr.Text("sub-Test")
     ses_list = gr.Text("ses-Demo")
@@ -248,20 +257,26 @@ class MsenseController():
         timer.tick(fn=self.update_params, outputs=params)
 
         with gr.Accordion(label="🗒️ Journaler", open=False):
-            # with gr.Row():
-            journal_msg = gr.Text(label="Message")
-            journal_examples = gr.Examples(
-                examples=[
-                    ["Task [NAME] started"],
-                    ["Task [NAME] stopped"],
-                    ["Task exception due to [REASON]"],
-                    ["Flag"],
-                ],
-                inputs=journal_msg
-            )
+            with gr.Row():
+                msg_type = gr.Radio(["Task start", "Task end", "Flag"], label="Message type")
+                task_name = get_task_list()
+                with gr.Column():
+                    task_name_refresh = gr.Button("🔄")
+                task_name_refresh.click(get_task_list, outputs=task_name)
+                
+            with gr.Accordion(label="Free text", open=False):
+                free_txt = gr.Text(label="Free text")
+                journal_examples = gr.Examples(
+                    examples=[
+                        ["Task [NAME] started"],
+                        ["Task [NAME] stopped"],
+                        ["Task exception due to [REASON]"],
+                        ["Flag"],
+                    ],
+                    inputs=free_txt
+                )
             btn_send_msg = gr.Button("✍️ Record message")
-
-            btn_send_msg.click(self.send_journal_msg, inputs=journal_msg)
+            btn_send_msg.click(self.send_journal_msg, inputs=[task_name, msg_type, free_txt])            
 
         # erase control
         with gr.Accordion(label="🚨🚨🚨 Danger zone 🚨🚨🚨", open=False):
@@ -309,9 +324,10 @@ class MsenseController():
 
         bt_search.click(self.get_available_devices_checkbox, inputs=text, outputs=available_devices)    
 
-    def send_journal_msg(self, journal_msg):
-        self.lsl_journaler.push_sample([journal_msg])
-        self.logger.info(f"YAMS JOURNALER: {journal_msg}")
+    def send_journal_msg(self, task, msg_type, free_txt):
+        msg = f"{msg_type} [{task}] {free_txt}"
+        self.lsl_journaler.push_sample([msg])
+        self.logger.info(f"YAMS JOURNALER: {msg}")
 
     def write_enc(self, enc):
         for name, peripheral in self.active_devices.items():
