@@ -121,6 +121,9 @@ class MsenseController():
 
         self.update_encoding_mode("Default")
 
+        self.t_start = None
+        self.delta_t = None
+
     def get_dev_dict(self):
         try:
             with open("device_info.json", 'r') as file:
@@ -333,9 +336,21 @@ class MsenseController():
         self.use_lsl = enable
 
     def update_params(self):
-        self.params = {"Memo": {
-            'type': self.ctl_state,
-        }}
+        if "Collection in progress" in self.ctl_state and self.t_start is not None:
+            delta_t = int(time.time() - self.t_start)
+            self.delta_t = str(datetime.timedelta(seconds=delta_t))
+            self.params = {"Memo": {
+                'type': f"{self.ctl_state} | Time elapsed: {self.delta_t}",
+            }}
+        elif "Collection stopped" in self.ctl_state:
+            self.params = {"Memo": {
+                'type': f"{self.ctl_state} | Last session: {self.delta_t}",
+            }}
+        else:
+            self.params = {"Memo": {
+                'type': self.ctl_state,
+            }}
+
         for name, device in self.active_devices.items():
             connection_status = "✅ Connected" if device.is_connected() else "🚫 Disconnected"
             try:
@@ -369,6 +384,7 @@ class MsenseController():
         os.makedirs(self.log_dir, exist_ok=True)
 
         gr.Info("▶️ Start data collection...")
+        self.t_start = time.time()
         self.logger.info(f"Start data collection with out dir = {self.log_dir}")
         self.logger.info(f"Subject ID = {self.session_info['sub_id']}")
         self.logger.info(f"Session ID = {self.session_info['ses_id']}")
