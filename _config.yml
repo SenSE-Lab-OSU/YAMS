@@ -22,7 +22,7 @@ title: YAMS
 # email: your-email@example.com
 # description: >- # this means to ignore newlines until "baseurl:"
 #   Documentation for YAMS: Yet Another MotionSenSE utility
-baseurl: "" # the subpath of your site, e.g. /blog
+baseurl: "/yams" # the subpath of your site, e.g. /blog
 url: "https://sense-lab-osu.github.io/YAMS/" # the base hostname & protocol for your site, e.g. http://example.com
 # github_username:  jekyll
 
