@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Quick Start
-permalink: /quick_start/
 ---
 
 # 🚀 Quick Start
