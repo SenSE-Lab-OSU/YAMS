@@ -27,7 +27,8 @@ url: "https://sense-lab-osu.github.io/YAMS/" # the base hostname & protocol for 
 # github_username:  jekyll
 
 # Build settings
-theme: minima
+# theme: minima
+theme: just-the-docs
 plugins:
   - jekyll-feed
 
