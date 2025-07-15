@@ -19,20 +19,18 @@
 # in the templates via {{ site.myvariable }}.
 
 title: YAMS
-email: your-email@example.com
-description: >- # this means to ignore newlines until "baseurl:"
-  Documentation for YAMS: Yet Another MotionSenSE utility
+# email: your-email@example.com
+# description: >- # this means to ignore newlines until "baseurl:"
+#   Documentation for YAMS: Yet Another MotionSenSE utility
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://sense-lab-osu.github.io/YAMS/" # the base hostname & protocol for your site, e.g. http://example.com
-github_username:  jekyll
+# github_username:  jekyll
 
 # Build settings
-theme: just-the-docs
+theme: minima
 plugins:
   - jekyll-feed
 
-aux_links:
-  Template Repository: https://github.com/just-the-docs/just-the-docs-template
 # Exclude from processing.
 # The following items will not be processed, by default.
 # Any item listed under the `exclude:` key here will be automatically added to
