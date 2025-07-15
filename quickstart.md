@@ -48,3 +48,7 @@ python -m yams
 The app interface should automatically pop up from the default browse. The interface is also accessible on [http://127.0.0.1:7860](http://127.0.0.1:7860)
 
 <!-- 🛠️ Coming soon: Homebrew formula and precompiled binaries for macOS/Linux. -->
+
+## Config wristband binding
+
+> config `device_info.json`
