@@ -146,7 +146,11 @@ class DataExtractor():
             print('=====', id, alias)
             file_name = f"{type_prefix}".replace(id, alias)
         else:   
-            file_name = f"{self.note}{type_prefix}"
+            sub_id = str(id)[:-2]
+            ses_id = str(id)[-2:]
+            alias = f"sub-{sub_id}_ses-{ses_id}"
+            # file_name = f"{self.note}{type_prefix}"
+            file_name = f"{type_prefix}".replace(id, alias)
         print(type_prefix, search_key)
         data_set = self.collect_all_data_by_prefix(in_dir, search_key, labels, formats)
         if data_set is not None:
