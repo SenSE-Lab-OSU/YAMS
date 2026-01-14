@@ -14,6 +14,9 @@ from datetime import datetime, UTC
 import gradio as gr
 import zipfile
 import tempfile
+from glob import glob
+import shutil
+from tqdm import tqdm
 
 def data_extraction_pro_interface():
     in_file = gr.File(file_types=[".zip"])
@@ -24,7 +27,13 @@ def data_extraction_pro_interface():
     with gr.Accordion(label="Help", open=False):
         gr.Markdown("## Data extraction pro mode")
 
-def extract_zip(zip_path):
+def batch_extract_zips(in_path):
+    zips = glob(os.path.join(in_path, "*.zip"))
+    print(zips)
+    for z in tqdm(zips):
+        extract_zip(z, cli_mode=True, out_dir=os.path.join(in_path, "out"))
+
+def extract_zip(zip_path, cli_mode=False, out_dir="./data"):
     df = get_session_encoding()
     if zip_path is not None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -38,9 +47,13 @@ def extract_zip(zip_path):
             for dev in devices:
                 in_dir = os.path.join(tmpdir, dev)
                 print("Before extraction contents:", os.listdir(in_dir))
+
+                # print("**************** dev=", dev)
+                # sys.exit(-1)
         
                 main(in_dir, in_dir, legacy_fs=False, df=df, note=dev)
-                print("After extraction contents:", os.listdir(in_dir))
+                print("After extraction contents:", os.listdir(in_dir), dev)
+                
 
             out_zip_path = os.path.join(tempfile.gettempdir(),
                                     os.path.basename(zip_path).replace('.zip', '_extracted.zip'))
@@ -52,6 +65,10 @@ def extract_zip(zip_path):
                         file_path = os.path.join(root, file)
                         arcname = os.path.relpath(file_path, start=tmpdir)
                         zipf.write(file_path, arcname)
+
+            if cli_mode:
+                os.makedirs(out_dir, exist_ok=True)
+                shutil.copy(out_zip_path, os.path.join(out_dir, os.path.basename(out_zip_path)))
         return gr.DownloadButton(label="🎉Download data", value=out_zip_path, interactive=True)
     else:
         return gr.DownloadButton(label="No data to be downloaded", interactive=False)
@@ -148,7 +165,8 @@ class DataExtractor():
         else:   
             sub_id = str(id)[:-2]
             ses_id = str(id)[-2:]
-            alias = f"sub-{sub_id}_ses-{ses_id}"
+
+            alias = f"sub-{sub_id}_ses-{ses_id}_{self.note}_"
             # file_name = f"{self.note}{type_prefix}"
             file_name = f"{type_prefix}".replace(id, alias)
         print(type_prefix, search_key)
@@ -404,5 +422,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(args.in_dir, args.out_dir, legacy_fs=args.legacy_fs, gradio=False)
+    # main(args.in_dir, args.out_dir, legacy_fs=args.legacy_fs, gradio=False)
+    batch_extract_zips(args.in_dir)
     
