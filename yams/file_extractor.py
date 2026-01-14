@@ -10,6 +10,7 @@ import psutil
 import re
 import json
 from datetime import datetime
+from yams.data_extraction import extract_zip
 
 class FileDownloader():
     def __init__(self):
@@ -23,7 +24,9 @@ class FileDownloader():
 
         file_explorer_btn = gr.Button("Browse session")
 
-        enc_table = gr.CheckboxGroup(label="Available session")
+        with gr.Row():
+            enc_table = gr.CheckboxGroup(label="Available session", scale=3)
+            auto_extract = gr.Checkbox(True, label="Extract data after download")
 
         file_explorer_btn.click(self.get_available_files, 
                                 inputs=[msense_path, msense_group],
@@ -40,7 +43,7 @@ class FileDownloader():
 
         download_btn = default_refresh_btn()
 
-        download_btn2.click(self.download_selected_files, inputs=enc_table, outputs=[info_panel, download_btn])
+        download_btn2.click(self.download_selected_files, inputs=[enc_table, auto_extract], outputs=[info_panel, download_btn])
 
         extract_btn.click(prompt_device_name, outputs=[label, confirm_btn, extract_btn])
 
@@ -50,7 +53,7 @@ class FileDownloader():
                                                         extract_btn,
                                                         confirm_btn])
         
-    def download_selected_files(self, enc_list):
+    def download_selected_files(self, enc_list, auto_extract=False):
         all_matched = {}
         for src_path, src_files in self.all_files.items():
             matched_files = []
@@ -103,7 +106,12 @@ class FileDownloader():
                         arcname = os.path.relpath(full_path, dst_dir)
                         zipf.write(full_path, arcname=arcname)
 
-            return "File ready", gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
+            if auto_extract:
+                progress = gr.Progress()
+                progress(0, desc=f"Extracting data. Please wait...")
+                return "File ready", extract_zip(zip_filename)
+            else:
+                return "File ready", gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
 
 
     def get_available_files(self, src_path, src_path_grp):
