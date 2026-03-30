@@ -96,6 +96,8 @@ def read_ppg_bin(filepath):
     counter_diff = np.insert(counter_diff, 0, 0)
     df['CDCT'] = t0 + np.cumsum(counter_diff) / 320
 
+    df['init_CDCT'] = t0
+
     return df, dt
 
 def read_ac_bin(filepath):
@@ -162,6 +164,8 @@ def read_ac_bin(filepath):
     counter_diff = np.diff(df['Counter']) % (2^16 - 1)
     counter_diff = np.insert(counter_diff, 0, 0)
     df['CDCT'] = t0 + np.cumsum(counter_diff) / 320
+
+    df['init_CDCT'] = t0
 
     return df, dt
 
