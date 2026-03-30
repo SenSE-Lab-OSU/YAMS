@@ -152,7 +152,10 @@ class FileDownloader():
                         timestamp = dt.strftime('%m/%d/%y')
 
                         # quick way to determine encoding technique
-                        if int(encoding) > 32000:
+                        if encoding is None:
+                            encoding = ''
+                            alias = f"None, ({timestamp})"
+                        elif int(encoding) > 32000:
                             sub = encoding[:-2]
                             ses = encoding[-2:]
                             # print(f"sub={sub}, ses={ses}")
@@ -164,7 +167,7 @@ class FileDownloader():
                             all_encoding.add(encoding)
 
                         # file_info[alias] = encoding
-                        file_info.append((alias, encoding))
+                            file_info.append((alias, encoding))
 
         return gr.CheckboxGroup(file_info)
 

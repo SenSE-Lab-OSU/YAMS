@@ -18,6 +18,157 @@ from glob import glob
 import shutil
 from tqdm import tqdm
 
+def get_participant_ids(folder_path):
+    """
+    Return sorted list of unique numeric prefixes (AAAAA)
+    from files matching pattern: AAAAAppgBBBBB.bin
+    
+    If prefix is missing, returns None for that case.
+    """
+
+    prefixes = set()
+
+    for filename in os.listdir(folder_path):
+        if not filename.endswith(".bin"):
+            continue
+
+        match = re.match(r"(\d*)ppg\d+\.bin$", filename)
+        if match:
+            prefix = match.group(1)
+            if prefix == "":
+                prefixes.add('')  # missing case
+            else:
+                prefixes.add(str(prefix))
+
+    return sorted(prefixes, key=lambda x: (x is None, x))
+
+
+def get_CDCT_init(file_path):
+    filename = os.path.basename(file_path)
+    pattern = r'\d*[A-Za-z]+(\d+)\.bin$'
+    match = re.search(pattern, filename)
+    
+    t0 = 0
+    if match:
+        t0 = int(match.group(1))
+
+    return t0, datetime.fromtimestamp(int(t0), UTC).strftime("%Y/%m/%d %H:%M:%S")
+
+def read_ppg_bin(filepath):
+    """
+    Read a single MotionSense PPG .bin file.
+    
+    Returns:
+        pandas.DataFrame with columns:
+        ['ir1', 'ir2', 'g1', 'g2', 'Timestamp', 'Counter']
+    """
+
+    labels = ["ir1", "ir2", "g1", "g2", "Timestamp", "Counter"]
+    record_format = "<6i"        # 6 little-endian int32
+    record_size = struct.calcsize(record_format)
+
+    # --- read raw bytes ---
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    # --- trim trailing 0xFF padding ---
+    # while len(data) > 0 and data[-1] == 0xFF:
+    #     data = data[:-1]
+
+    # --- keep only full records ---
+    n_records = len(data) // record_size
+    data = data[: n_records * record_size]
+
+    if n_records == 0:
+        raise ValueError("No valid records found in file.")
+
+    # --- unpack ---
+    records = struct.iter_unpack(record_format, data)
+    arr = np.array(list(records), dtype=np.int32)
+
+    # --- convert to DataFrame ---
+    df = pd.DataFrame(arr, columns=labels)
+    df = df.replace(-1, np.nan).dropna(how='all')
+
+    t0, dt = get_CDCT_init(filepath)
+
+    counter_diff = np.diff(df['Counter']) % (2^16 - 1)
+    counter_diff = np.insert(counter_diff, 0, 0)
+    df['CDCT'] = t0 + np.cumsum(counter_diff) / 320
+
+    df['init_CDCT'] = t0
+
+    return df, dt
+
+def read_ac_bin(filepath):
+    """
+    Read a single MotionSense AC .bin file.
+
+    Returns:
+        pandas.DataFrame with columns:
+        ['AccX','AccY','AccZ',
+         'GyroX','GyroY','GyroZ',
+         'ENMO','Timestamp','Counter']
+    """
+
+    labels = [
+        "AccX", "AccY", "AccZ",
+        "GyroX", "GyroY", "GyroZ",
+        "ENMO",
+        "Timestamp",
+        "Counter"
+    ]
+
+    record_format = "<3h4f2i"  
+    record_size = struct.calcsize(record_format)
+
+    # --- read raw bytes ---
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    # --- trim trailing 0xFF padding ---
+    # while len(data) > 0 and data[-1] == 0xFF:
+    #     data = data[:-1]
+
+    # --- keep only full records ---
+    n_records = len(data) // record_size
+    data = data[: n_records * record_size]
+
+    if n_records == 0:
+        raise ValueError("No valid records found in file.")
+
+    # --- unpack ---
+    records = struct.iter_unpack(record_format, data)
+    arr = list(records)
+
+    # Convert to structured numpy array with correct dtypes
+    dtype = np.dtype([
+        ("AccX", np.int16),
+        ("AccY", np.int16),
+        ("AccZ", np.int16),
+        ("GyroX", np.float32),
+        ("GyroY", np.float32),
+        ("GyroZ", np.float32),
+        ("ENMO", np.float32),
+        ("Timestamp", np.int32),
+        ("Counter", np.int32),
+    ])
+
+    arr = np.array(arr, dtype=dtype)
+
+    df = pd.DataFrame(arr)
+    df = df.replace(-1, np.nan).dropna(how='all')
+
+    t0, dt = get_CDCT_init(filepath)
+
+    counter_diff = np.diff(df['Counter']) % (2^16 - 1)
+    counter_diff = np.insert(counter_diff, 0, 0)
+    df['CDCT'] = t0 + np.cumsum(counter_diff) / 320
+
+    df['init_CDCT'] = t0
+
+    return df, dt
+
 def data_extraction_pro_interface():
     in_file = gr.File(file_types=[".zip"])
     out = gr.DownloadButton(label="No data to be downloaded", interactive=False)
@@ -140,7 +291,7 @@ class DataExtractor():
         for i in range(len(self.df.index)):
             curr = self.df.iloc[i]
             alias_dict[f"{curr['encoding']}"] = f"{curr['subject_id']}_{curr['session_id']}_{self.note}_{curr['encoding']}"
-        print(alias_dict)
+        # print(alias_dict)
         return alias_dict
 
     def run(self):
@@ -169,7 +320,8 @@ class DataExtractor():
             alias = f"sub-{sub_id}_ses-{ses_id}_{self.note}_"
             # file_name = f"{self.note}{type_prefix}"
             file_name = f"{type_prefix}".replace(id, alias)
-        print(type_prefix, search_key)
+
+        print(type_prefix, search_key, labels, formats, '********')
         data_set = self.collect_all_data_by_prefix(in_dir, search_key, labels, formats)
         if data_set is not None:
             os.makedirs(out_dir, exist_ok=True)
@@ -195,25 +347,22 @@ class DataExtractor():
         files = gather_files_by_prefix(prefix, path)  
 
         if len(files) == 0:
-            return
+            return None
+        
+
+        all_df = []
+        
         for file in files:
             full_path = os.path.join(path, file)
-            print("full path: ", full_path)
-            test_file = open(full_path, "rb")
-            data = test_file.read()
-            if len(data) != 0:
-                total_errors += process_data(data, all_data, types)
-            else:
-                print("Warning: found empty file!")
 
-        full_dict = {}
-        for index in range(len(labels)):
-            full_dict[labels[index]] = all_data[index]
+            if 'ppg' in file:
+                df, dt = read_ppg_bin(full_path)
+            elif 'ac' in file:
+                df, dt = read_ac_bin(full_path)
+            
+            all_df.append(df)
 
-        dataset = pd.DataFrame(full_dict)
-        dataset = get_cdct(dataset, files, fs=self.sample_tick)
-
-        return dataset
+        return pd.concat(all_df)
 
 
     def obtain_predix_ids(self):
@@ -260,95 +409,6 @@ struct_key = {"f": 4,
               "Q": 8
               }
 
-
-def process_data(data, categories: list[list], format: list, use_check=False) -> int:
-    # we always assume that the last category is the packet counter
-    # assert len(categories) == len(format)
-    errors = 0
-
-    skip_code = 1
-    counter_value = 1
-    current_index = 0
-    data_position = 0
-    num_of_categories = len(categories)
-    end_trim_size = calculate_file_end(data)
-    data_length = len(data) - end_trim_size
-    while data_position + struct_key[format[current_index][1]] <= data_length:
-        try:
-
-            length = struct_key[format[current_index][1]]
-            data_byte = data[data_position:data_position + length]
-            data_position += length
-            result = struct.unpack(format[current_index], data_byte)[0]
-
-            if result == 4294967295:
-                continue
-            # print(result)
-            categories[current_index].append(result)
-            current_index += 1
-            if current_index >= num_of_categories:
-                current_index = 0
-                if use_check:
-                    # we are on the last category, which means we are looking at the counter
-                    if (result != counter_value):
-                        print("error: got " + str(result) + " expected " + str(counter_value))
-                        errors += 1
-                    counter_value += 1
-
-
-        except Exception as e:
-            errors += 1
-            print(e)
-    
-    if len(categories[0]) > len(categories[1]):
-        print("0xff-trim issue found, fixing...")
-        categories[0].pop()
-
-    resultant_end_trim_workaround(categories)
-
-    if len(categories[0]) > len(categories[1]):
-        print("0xff-trim issue found, fixing...")
-        categories[0].pop()
-
-    resultant_end_trim_workaround(categories)
-
-    print("errors: " + str(errors))
-    return errors
-
-
-def resultant_end_trim_workaround(categories):
-    length_array = []
-    for element in categories:
-        length_array.append(len(element))
-
-    max_diff = numpy.max(length_array) - numpy.min(length_array)
-    if max_diff == 0:
-        return
-    if max_diff == 1:
-        print("warning: end length of array differs by 1. Implementing fix.")
-        print("mismatch array: " + str(length_array))
-        max_value = max(length_array)
-        for element in categories:
-            if max_value == len(element):
-                element.pop()
-    elif max_diff > 1:
-        print("error: end lengths of array differs by too much. Data is potentially corrupt.")
-        print("mismatch array: " + str(length_array))
-
-
-    max_diff = numpy.max(length_array) - numpy.min(length_array)
-    if max_diff == 0:
-        return
-    if max_diff == 1:
-        print("warning: end length of array differs by 1. Implementing fix.")
-        print("mismatch array: " + str(length_array))
-        max_value = max(length_array)
-        for element in categories:
-            if max_value == len(element):
-                element.pop()
-    elif max_diff > 1:
-        print("error: end lengths of array differs by too much. Data is potentially corrupt.")
-        print("mismatch array: " + str(length_array))
 
 def file_sort(element1: str):
     numeric_index = element1.find(it_prefix)
