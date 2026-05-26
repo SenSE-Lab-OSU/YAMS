@@ -111,6 +111,15 @@ To halt all on-going collection on the MotionSenSE wristbands,
 `pyi-makespec --collect-data=gradio_client --collect-data=gradio --collect-data=safehttpx --collect-data=groovy --onefile --osx-bundle-identifier 'com.yams' --icon yams/resources/icons/yams.icns app.py`
 
 
+## Instructions
+
+### (advanced) running data extraction in command line
+
+```bash
+cd yams
+python data_extraction.py -i "data_in" -o "data_out" --save_format 'pickle' --ignore_id
+```
+
 ## Roadmap
 
 - [x] Device data transfer
