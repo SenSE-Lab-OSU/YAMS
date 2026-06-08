@@ -466,10 +466,13 @@ class MsenseController():
 
     def enmo_handler(self, data, peripheral, name):
         # print(peripheral.identifier(), data)
-        packet_counter = data[4:6]
         ENMO = struct.unpack("<f", data[0:4])
-        
-        packet_counter = struct.unpack("<H", packet_counter)
+
+        if len(data) == 8:
+            packet_counter = struct.unpack("<I", data[4:8])
+        elif len(data) == 6:
+            packet_counter = struct.unpack("<H", data[4:6])
+
         horizontal_array = [ENMO[0], packet_counter[0]]
         print(f"{name}: package counter", horizontal_array)
 

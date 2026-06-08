@@ -168,6 +168,23 @@ def get_session_encoding():
         })
     return df
 
+def data_extraction_interface():
+    # in_files = gr.File(file_count="multiple")
+    in_dir = gr.Text("/path/to/binary/data", label="Input directory")
+    out_dir = gr.Text("/path/to/output", label="Output directory")
+
+    note = gr.Text("", label="Note")
+
+    legacy_fs = gr.Checkbox(False, label="(Uncommon) legacy sampling rate")
+
+    btn = gr.Button("Extract raw data")
+
+    with gr.Accordion("Encoding mapping"):
+        df = get_session_encoding()
+        dataframe = gr.DataFrame(value=df)
+
+    btn.click(main, inputs=[in_dir, out_dir, legacy_fs, dataframe, note])
+
 class DataExtractor():
     def __init__(self, in_dir, out_dir, legacy_fs=False, df=None, note="", save_format="csv", ignore_id_parsing=False):
         if legacy_fs:
