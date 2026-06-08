@@ -56,6 +56,13 @@ def participant_encoding_default(sub, ses):
 
     return integer_representation
 
+class MsenseDevice():
+
+    def __init__(self, name, peripheral):
+        self.name = name
+        self.peripheral = peripheral
+        self.battery = 100
+
 class MsenseOutlet(StreamOutlet):
     def __init__(self, name, peripheral, chunk_size=32, max_buffered=360, use_lsl=True):
         self.name = name.replace(':', '-')
@@ -64,7 +71,7 @@ class MsenseOutlet(StreamOutlet):
         lsl_status = "OK" if self.use_lsl else "disabled"
         self.msg = f"📻 {self.tic()} LSL {lsl_status}. Ready to start..."
         self.msg_fun = f"📻 {self.tic()} LSL {lsl_status}. Ready to start..."
-
+        self.msg_battery_level = "Battery: "
         if self.use_lsl:
             info = StreamInfo(name, "MotionSenSE", 3, 2, cf_double64, peripheral.address())
             super().__init__(info, chunk_size, max_buffered)
@@ -177,7 +184,7 @@ class MsenseController():
                 else:
                     name = f"{peripheral.identifier()} [{peripheral.address()}]"
 
-                self.devices[name] = peripheral
+                self.devices[name] = MsenseDevice(name, peripheral)
 
         self.ctl_state = "Device scanning completed"
 
@@ -192,7 +199,7 @@ class MsenseController():
         for n in names:
             gr.Info(f"Connecting to devices: {n}")
             print(f'==== {n}')
-            p = self.devices[n]
+            p = self.devices[n].peripheral
             print(f"=== {p.identifier()} at {p.address()}")
             p.set_callback_on_connected(lambda: self.logger.info(f"{n} {p.identifier()} is connected"))
             p.set_callback_on_disconnected(lambda: self.logger.info(f"{n} {p.identifier()} is disconnected"))
@@ -201,6 +208,11 @@ class MsenseController():
             self.active_outlets[n] = MsenseOutlet(n, p, use_lsl=self.use_lsl)
 
         self.ctl_state = "Device(s) connected"
+        try:
+            self.get_battery_status(names)
+        except Exception as e:
+            print("failed to get battery status")
+            print(e)
 
     def disconnect_all(self):
         self.ctl_state = "Start device disconnection"
@@ -371,8 +383,10 @@ class MsenseController():
             connection_status = "✅ Connected" if device.is_connected() else "🚫 Disconnected"
             try:
                 msg_fun = self.active_outlets[name].msg_fun
+                battery_level = self.active_outlets[name].msg_battery_level
             except Exception as e:
                 msg_fun = "LSL outlet unavailable"
+                battery_level = "battery unavalible"
 
             try:
                 msg = self.active_outlets[name].msg
@@ -380,7 +394,7 @@ class MsenseController():
                 msg = str(e)
 
             self.params[name] = {
-                'type': f"{connection_status} | {msg_fun}",
+                'type': f"{connection_status} | {battery_level} | {msg_fun} ",
                 'description': msg
             }
 
@@ -440,14 +454,20 @@ class MsenseController():
         characteristic_uuid = "da39c931-1d81-48e2-9c68-d0ae4bbd351f"
         peripheral.write_request(service_uuid, characteristic_uuid, struct.pack("<I", int(start)))
 
-        self.register_enmo(peripheral, name)
+        self.register_senses(peripheral, name)
+
 
         # 
         if start and self.auto_reconnect:
             self.start_device_monitor()
         elif not start:
             self.stop_device_monitor()
-            
+
+    # global function that will register all desired notifications
+    # this will enable us to be able to determine what notifies we want to have on and what notifies we want to have off
+    def register_senses(self, peripheral, name):
+        self.register_enmo(peripheral, name)
+        self.register_battery(peripheral, name)
 
     def register_enmo(self, peripheral, name):
         # ENMO 
@@ -455,14 +475,24 @@ class MsenseController():
         characteristic_uuid = "da39c951-1d81-48e2-9c68-d0ae4bbd351f"
         contents = peripheral.notify(service_uuid, characteristic_uuid, lambda data: self.enmo_handler(data, peripheral, name))
 
+    def register_battery(self, peripheral, name):
+        service_uuid = "0000180f-0000-1000-8000-00805f9b34fb"
+        characteristic_uuid = "00002a19-0000-1000-8000-00805f9b34fb"
+        contents = peripheral.notify(service_uuid, characteristic_uuid,
+                                     lambda data: self.battery_handler(data, peripheral, name))
     def get_battery_status(self, names):
         for n in names:
             peripheral = self.devices[n]
 
             service_uuid = "0000180f-0000-1000-8000-00805f9b34fb"
             characteristic_uuid = "00002a19-0000-1000-8000-00805f9b34fb"
-            contents = peripheral.read(service_uuid, characteristic_uuid)
+            contents = peripheral.peripheral.read(service_uuid, characteristic_uuid)
+            peripheral.battery_lvl = contents[0]
             print(n, f"battery = {str(contents[0])}")
+            try:
+                self.active_outlets[n].msg_battery_level = "Battery: " + str(int(contents[0])) + "%"
+            except Exception as e:
+                print(e)
 
     def enmo_handler(self, data, peripheral, name):
         # print(peripheral.identifier(), data)
@@ -475,10 +505,20 @@ class MsenseController():
 
         self.active_outlets[name].push_sample([ENMO[0], packet_counter[0]])
         
+    def battery_handler(self, battery, peripheral, name):
+        battery_lvl = battery[0]
+        print("battery notif " + str(battery))
+        try:
+            self.active_outlets[name].msg_battery_level = "Battery: " + str(int(battery_lvl)) + "%"
+            self.devices[name].battery_lvl = battery_lvl
+        except Exception as e:
+            print(e)
+
+
 
     def get_selected_device_services(self, names):
         for n in names:
-            p = self.devices[n]
+            p = self.devices[n].peripheral
             print(f'======== Services of device {n}')
             self.get_services(p)
         self.get_battery_status(names)
@@ -499,7 +539,7 @@ class MsenseController():
             if not p.is_connected():
                 try:
                     p.connect()
-                    self.register_enmo(p, name)
+                    self.register_senses(p, name)
                 except Exception as e:
                     print(str(e))
 
@@ -512,7 +552,7 @@ class MsenseController():
                     device.connect()
                     if device.is_connected():
                         self.logger.info(f"Reconnected to {name} {device.identifier()}")
-                        self.register_enmo(device, name)
+                        self.register_senses(device, name)
                     else:
                         self.logger.warning(f"Failed to reconnect to {name} {device.identifier()}")
                 else:
