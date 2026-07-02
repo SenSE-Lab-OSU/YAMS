@@ -32,6 +32,17 @@ def get_participant_ids(folder_path):
                 prefixes.add(str(prefix))
     return sorted(prefixes, key=lambda x: (x is None, x))
 
+def get_device_version(folder_path):
+    uuid_path = os.path.join(folder_path, "uuid.txt")
+    if not os.path.exists(uuid_path):
+        return (0, 0, 0)
+    with open(uuid_path, 'r') as f:
+        content = f.read()
+    match = re.search(r'Version:\s*(\d+)\.(\d+)\.(\d+)', content)
+    if match:
+        return tuple(int(x) for x in match.groups())
+    return (0, 0, 0)
+
 def get_CDCT_init(file_path):
     filename = os.path.basename(file_path)
     pattern = r'\d*[A-Za-z]+(\d+)\.bin$'
@@ -72,14 +83,41 @@ def read_ppg_bin(filepath):
 
     return df, dt
 
-def read_ac_bin(filepath):
-    labels = [
-        "AccX", "AccY", "AccZ",
-        "GyroX", "GyroY", "GyroZ",
-        "ENMO", "Timestamp", "Counter"
-    ]
+def read_ppg_bin_v2(filepath):
+    """v4.7.0+: 4x uint32 ppg + uint32 global_tick_512hz, no Timestamp field."""
+    labels = ["ir1", "ir2", "g1", "g2", "Counter"]
+    record_format = "<5I"
+    record_size = struct.calcsize(record_format)
 
-    record_format = "<3h4f2i"  
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    n_records = len(data) // record_size
+    data = data[: n_records * record_size]
+
+    if n_records == 0:
+        raise ValueError("No valid records found in file.")
+
+    records = struct.iter_unpack(record_format, data)
+    arr = np.array(list(records), dtype=np.uint32)
+
+    df = pd.DataFrame(arr, columns=labels)
+    df = df[df['Counter'] != np.iinfo(np.uint32).max]
+
+    t0, dt = get_CDCT_init(filepath)
+
+    counter_diff = np.diff(df['Counter'].astype(np.int64)) % (2**32)
+    counter_diff = np.insert(counter_diff, 0, 0)
+    df['CDCT'] = t0 + np.cumsum(counter_diff) / 512
+    df['init_CDCT'] = t0
+
+    return df, dt
+
+def read_ac_bin_v2(filepath):
+    """v4.7.0+: 3x int16 accel + 3x float32 (quaternion, reported as GyroX/Y/Z) + float32 enmo + uint32 global_tick_512hz, no Timestamp field."""
+    labels = ["AccX", "AccY", "AccZ", "QuatX", "QuatY", "QuatZ", "ENMO", "Counter"]
+
+    record_format = "<3h4fI"
     record_size = struct.calcsize(record_format)
 
     with open(filepath, "rb") as f:
@@ -96,7 +134,48 @@ def read_ac_bin(filepath):
 
     dtype = np.dtype([
         ("AccX", np.int16), ("AccY", np.int16), ("AccZ", np.int16),
-        ("GyroX", np.float32), ("GyroY", np.float32), ("GyroZ", np.float32),
+        ("QuatX", np.float32), ("QuatY", np.float32), ("QuatZ", np.float32),
+        ("ENMO", np.float32), ("Counter", np.uint32),
+    ])
+
+    arr = np.array(arr, dtype=dtype)
+    df = pd.DataFrame(arr)
+    df = df[df['Counter'] != np.iinfo(np.uint32).max]
+
+    t0, dt = get_CDCT_init(filepath)
+
+    counter_diff = np.diff(df['Counter'].astype(np.int64)) % (2**32)
+    counter_diff = np.insert(counter_diff, 0, 0)
+    df['CDCT'] = t0 + np.cumsum(counter_diff) / 512
+    df['init_CDCT'] = t0
+
+    return df, dt
+
+def read_ac_bin(filepath):
+    labels = [
+        "AccX", "AccY", "AccZ",
+        "QuatX", "QuatY", "QuatZ",
+        "ENMO", "Timestamp", "Counter"
+    ]
+
+    record_format = "<3h4f2i"
+    record_size = struct.calcsize(record_format)
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    n_records = len(data) // record_size
+    data = data[: n_records * record_size]
+
+    if n_records == 0:
+        raise ValueError("No valid records found in file.")
+
+    records = struct.iter_unpack(record_format, data)
+    arr = list(records)
+
+    dtype = np.dtype([
+        ("AccX", np.int16), ("AccY", np.int16), ("AccZ", np.int16),
+        ("QuatX", np.float32), ("QuatY", np.float32), ("QuatZ", np.float32),
         ("ENMO", np.float32), ("Timestamp", np.int32), ("Counter", np.int32),
     ])
 
@@ -177,16 +256,26 @@ def data_extraction_interface():
 
     legacy_fs = gr.Checkbox(False, label="(Uncommon) legacy sampling rate")
 
+    with gr.Row():
+        save_format = gr.Radio(["csv", "pickle"], value="csv", label="Save format")
+        ignore_id = gr.Checkbox(False, label="Ignore subject/session ID parsing")
+        force_new_format = gr.Checkbox(False, label="Force v4.7.0+ format")
+
     btn = gr.Button("Extract raw data")
 
     with gr.Accordion("Encoding mapping"):
         df = get_session_encoding()
         dataframe = gr.DataFrame(value=df)
 
-    btn.click(main, inputs=[in_dir, out_dir, legacy_fs, dataframe, note])
+    gradio_state = gr.State(True)
+    btn.click(main, inputs=[in_dir, out_dir, legacy_fs, dataframe, note, gradio_state, save_format, ignore_id, force_new_format])
 
 class DataExtractor():
-    def __init__(self, in_dir, out_dir, legacy_fs=False, df=None, note="", save_format="csv", ignore_id_parsing=False):
+    def __init__(self, in_dir, out_dir, legacy_fs=False, df=None, note="", save_format="csv", ignore_id_parsing=False, force_new_format=False):
+        self.device_version = get_device_version(in_dir)
+        self.use_new_format = force_new_format or (self.device_version >= (4, 7, 0))
+        print(f"device version: {'.'.join(str(x) for x in self.device_version)}, new format: {self.use_new_format} (forced: {force_new_format})")
+
         if legacy_fs:
             self.sample_tick = 200
         else:
@@ -211,12 +300,19 @@ class DataExtractor():
         with open(os.path.join(self.out_dir, "README.txt"), "w") as file:
             file.write(f"Raw data directory = {self.in_dir}\n")
             file.write(f"Legacy sampling rate = {legacy_fs} (True: 25 Hz, False: 32 Hz)\n")
+            file.write(f"Save format = {save_format}\n")
+            file.write(f"Ignore subject/session ID parsing = {ignore_id_parsing}\n")
             file.write(f"I m-sense with YAMS at https://github.com/SenSE-Lab-OSU/YAMS\n")
+            uuid_path = os.path.join(in_dir, "uuid.txt")
+            if os.path.exists(uuid_path):
+                file.write("\n--- Device info (uuid.txt) ---\n")
+                with open(uuid_path, "r") as uuid_file:
+                    file.write(uuid_file.read())
 
         self.ppg_labels = ["ir1", "ir2", "g1", "g2",  "Timestamp", "Counter"]
         self.ppg_formats = ["<i", "<i", "<i", "<i", "<i", "<i"]
 
-        self.acc_labels = ["AccX", "AccY", "AccZ", "GyroX", "GyroY", "GyroZ", "ENMO", "Timestamp", "Counter"]
+        self.acc_labels = ["AccX", "AccY", "AccZ", "QuatX", "QuatY", "QuatZ", "ENMO", "Timestamp", "Counter"]
         self.acc_formats = ["<h", "<h", "<h", "<f", "<f", "<f", "<f", "<i", "<i"]
 
     def get_encoding_alias(self):
@@ -260,9 +356,14 @@ class DataExtractor():
         
         if data_set is not None:
             os.makedirs(out_dir, exist_ok=True)
-            counter_validity_check(data_set)
+            counter_validity_check(data_set, use_new_format=self.use_new_format)
 
-            dt = [datetime.fromtimestamp(int(t), UTC).strftime("%Y/%m/%d %H:%M:%S") for t in data_set['CDCT']]
+            try:
+                dt = [datetime.fromtimestamp(int(t), UTC).strftime("%Y/%m/%d %H:%M:%S") for t in data_set['CDCT']]
+            except Exception as e:
+                print(str(e))
+
+                dt = -1
             data_set['Datetime'] = dt
 
             if 'ac' in search_key:
@@ -284,9 +385,9 @@ class DataExtractor():
         for file in files:
             full_path = os.path.join(path, file)
             if 'ppg' in file:
-                df, dt = read_ppg_bin(full_path)
+                df, dt = read_ppg_bin_v2(full_path) if self.use_new_format else read_ppg_bin(full_path)
             elif 'ac' in file:
-                df, dt = read_ac_bin(full_path)
+                df, dt = read_ac_bin_v2(full_path) if self.use_new_format else read_ac_bin(full_path)
             all_df.append(df)
 
         return pd.concat(all_df)
@@ -319,11 +420,19 @@ def gather_files_by_prefix(prefix: str, path):
     all_files.sort(key=file_sort)
     return all_files
 
-def counter_validity_check(df: pd.DataFrame):
+def counter_validity_check(df: pd.DataFrame, use_new_format=False):
     counter_columns = df.iloc[:, -1:]
     counter_arr = numpy.array(counter_columns).flatten()
     diff_arr = numpy.diff(counter_arr)
-    check_array = (diff_arr == 5) | (diff_arr == 10) | (diff_arr < -65000)
+    if use_new_format:
+        positive_diffs = diff_arr[diff_arr > 0]
+        if len(positive_diffs) == 0:
+            print("pass counter check: N/A (no positive diffs)")
+            return
+        expected_step = int(numpy.median(positive_diffs))
+        check_array = (diff_arr == expected_step) | (diff_arr == expected_step * 2) | (diff_arr > 2**31)
+    else:
+        check_array = (diff_arr == 5) | (diff_arr == 10) | (diff_arr < -65000)
     print("pass counter check: " + str(numpy.all(check_array)))
     print("and number of non matching samples: " + str(numpy.count_nonzero(check_array == 0)))
 
@@ -344,8 +453,8 @@ def get_cdct(df, bin_list, fs=320):
     df['CDCT'] = t0 + np.cumsum(counter_diff) / fs
     return df
 
-def main(in_dir, out_dir, legacy_fs=False, df=None, note="", gradio=True, save_format="csv", ignore_id_parsing=False):
-    extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs, df=df, note=note, save_format=save_format, ignore_id_parsing=ignore_id_parsing)
+def main(in_dir, out_dir, legacy_fs=False, df=None, note="", gradio=True, save_format="csv", ignore_id_parsing=False, force_new_format=False):
+    extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs, df=df, note=note, save_format=save_format, ignore_id_parsing=ignore_id_parsing, force_new_format=force_new_format)
     extractor.run()
     if df is not None: print(df.head())
     if gradio: gr.Info("✅ Extraction completed")
@@ -362,10 +471,11 @@ if __name__ == '__main__':
     parser.add_argument('--save_format', type=str, choices=['csv', 'pickle'], default='csv', help="Format to save extracted data (csv or pickle)")
     parser.add_argument('--ignore_id', action='store_true', default=False, help="Ignore subject and session ID parsing for file names")
     parser.add_argument('--mode', type=str, choices=['dir', 'batch'], default='dir', help="Run mode: 'dir' for single directory of bins, 'batch' for folder of zips")
+    parser.add_argument('--force_new_format', action='store_true', default=False, help="Force v4.7.0+ extraction format regardless of uuid.txt version")
 
     args = parser.parse_args()
 
     if args.mode == 'batch':
         batch_extract_zips(args.in_dir, save_format=args.save_format, ignore_id_parsing=args.ignore_id)
     else:
-        main(args.in_dir, args.out_dir, legacy_fs=args.legacy_fs, gradio=False, save_format=args.save_format, ignore_id_parsing=args.ignore_id)
+        main(args.in_dir, args.out_dir, legacy_fs=args.legacy_fs, gradio=False, save_format=args.save_format, ignore_id_parsing=args.ignore_id, force_new_format=args.force_new_format)
