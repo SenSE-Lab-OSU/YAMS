@@ -1,3 +1,6 @@
+import multiprocessing
+multiprocessing.freeze_support()
+
 try:
     from yams.__main__ import main
     main()

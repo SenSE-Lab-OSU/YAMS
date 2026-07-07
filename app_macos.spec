@@ -8,13 +8,23 @@ datas += collect_data_files('gradio')
 datas += collect_data_files('safehttpx')
 datas += collect_data_files('groovy')
 
-_conda_prefix = os.environ.get('CONDA_PREFIX', '/opt/miniconda3/envs/yams')
-_liblsl = os.path.join(_conda_prefix, 'lib', 'liblsl.dylib')
+# liblsl is not bundled in the macOS pylsl wheel — find it from conda or homebrew
+_liblsl_candidates = [
+    os.path.join(os.environ.get('CONDA_PREFIX', ''), 'lib', 'liblsl.dylib'),
+    '/opt/homebrew/lib/liblsl.dylib',
+    '/usr/local/lib/liblsl.dylib',
+]
+_liblsl = next((p for p in _liblsl_candidates if os.path.exists(p)), None)
+if _liblsl is None:
+    raise FileNotFoundError(
+        "liblsl.dylib not found. Install via conda (`conda install -c conda-forge liblsl`) "
+        "or homebrew (`brew install labstreaminglayer/tap/lsl`)."
+    )
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[(_liblsl, '.')],
+    binaries=[(_liblsl, 'pylsl/lib')],
     datas=datas,
     hiddenimports=['pylsl'],
     hookspath=[],
