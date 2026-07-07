@@ -194,8 +194,9 @@ def read_ac_bin(filepath):
 
 def data_extraction_pro_interface():
     in_file = gr.File(file_types=[".zip"])
+    force_new_format = gr.Checkbox(False, label="Force v4.7.0+ format")
     out = gr.DownloadButton(label="No data to be downloaded", interactive=False)
-    in_file.change(extract_zip, inputs=in_file, outputs=out)
+    in_file.change(lambda f, fnf: extract_zip(f, force_new_format=fnf), inputs=[in_file, force_new_format], outputs=out)
     with gr.Accordion(label="Help", open=False):
         gr.Markdown("## Data extraction pro mode")
 
@@ -205,7 +206,7 @@ def batch_extract_zips(in_path, save_format="csv", ignore_id_parsing=False):
     for z in tqdm(zips):
         extract_zip(z, cli_mode=True, out_dir=os.path.join(in_path, "out"), save_format=save_format, ignore_id_parsing=ignore_id_parsing)
 
-def extract_zip(zip_path, cli_mode=False, out_dir="./data", save_format="csv", ignore_id_parsing=False):
+def extract_zip(zip_path, cli_mode=False, out_dir="./data", save_format="csv", ignore_id_parsing=False, force_new_format=False):
     df = get_session_encoding()
     if zip_path is not None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -217,7 +218,7 @@ def extract_zip(zip_path, cli_mode=False, out_dir="./data", save_format="csv", i
             devices = os.listdir(tmpdir)
             for dev in devices:
                 in_dir = os.path.join(tmpdir, dev)
-                main(in_dir, in_dir, legacy_fs=False, df=df, note=dev, gradio=False, save_format=save_format, ignore_id_parsing=ignore_id_parsing)
+                main(in_dir, in_dir, legacy_fs=False, df=df, note=dev, gradio=False, save_format=save_format, ignore_id_parsing=ignore_id_parsing, force_new_format=force_new_format)
                 
             out_zip_path = os.path.join(tempfile.gettempdir(),
                                     os.path.basename(zip_path).replace('.zip', '_extracted.zip'))

@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from PyInstaller.utils.hooks import collect_data_files
 
 datas = []
@@ -7,13 +8,15 @@ datas += collect_data_files('gradio')
 datas += collect_data_files('safehttpx')
 datas += collect_data_files('groovy')
 
+_conda_prefix = os.environ.get('CONDA_PREFIX', '/opt/miniconda3/envs/yams')
+_liblsl = os.path.join(_conda_prefix, 'lib', 'liblsl.dylib')
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[('/opt/miniconda3/envs/yams/bin/../lib/', 'liblsl.dylib')],
+    binaries=[(_liblsl, '.')],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=['pylsl'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
