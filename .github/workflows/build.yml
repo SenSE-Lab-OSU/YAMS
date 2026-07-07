@@ -1,0 +1,66 @@
+name: Build YAMS
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: "3.12"
+          activate-environment: yams
+
+      - name: Install dependencies
+        shell: bash -el {0}
+        run: |
+          conda install -c conda-forge liblsl -y
+          pip install pyinstaller -r requirements.txt
+
+      - name: Build
+        shell: bash -el {0}
+        run: pyinstaller app_macos.spec --noconfirm
+
+      - name: Smoke test
+        shell: bash -el {0}
+        run: |
+          ./dist/YAMS_MacOS_arm64 &
+          PID=$!
+          sleep 10
+          if kill -0 $PID 2>/dev/null; then
+            echo "Smoke test passed"
+            kill $PID
+          else
+            echo "Binary exited early" && exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YAMS-MacOS-arm64
+          path: dist/YAMS_MacOS_arm64
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt
+
+      - name: Build
+        run: pyinstaller app_windows.spec --noconfirm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YAMS-Windows-x64
+          path: dist/YAMS_Windows_x64.exe

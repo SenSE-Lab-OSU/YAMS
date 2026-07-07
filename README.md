@@ -111,6 +111,46 @@ To halt all on-going collection on the MotionSenSE wristbands,
 `pyi-makespec --collect-data=gradio_client --collect-data=gradio --collect-data=safehttpx --collect-data=groovy --onefile --osx-bundle-identifier 'com.yams' --icon yams/resources/icons/yams.icns app.py`
 
 
+## Instructions
+
+### (advanced) running data extraction in command line
+
+Run from the project root:
+
+```bash
+python -m yams.data_extraction -i "data_in" -o "data_out"
+```
+
+**All options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `-i`, `--in_dir` | *(required)* | Directory containing `.bin` files |
+| `-o`, `--out_dir` | `./` | Output directory |
+| `--save_format` | `csv` | Output format: `csv` or `pickle` |
+| `--ignore_id` | off | Skip subject/session ID parsing; use raw filenames |
+| `--legacy_fs` | off | Use 25 Hz clock for CDCT (uncommon, old devices) |
+| `--force_new_format` | off | Force v4.7.0+ binary layout regardless of `uuid.txt` version |
+| `--mode` | `dir` | `dir`: single folder of `.bin` files; `batch`: folder of `.zip` archives |
+
+**Examples:**
+
+```bash
+# Basic extraction
+python -m yams.data_extraction -i "data_in" -o "data_out"
+
+# Save as pickle, skip ID parsing
+python -m yams.data_extraction -i "data_in" -o "data_out" --save_format pickle --ignore_id
+
+# Force new format on a device reporting an older version
+python -m yams.data_extraction -i "data_in" -o "data_out" --ignore_id --force_new_format
+
+# Batch extract a folder of zip archives
+python -m yams.data_extraction -i "data_in" --mode batch
+```
+
+The device version is read automatically from `uuid.txt` in the input directory. If v4.7.0+, the new binary layout (uint32 PPG, quaternion IMU, 32-bit counter at 512 Hz) is used; otherwise the legacy layout is used.
+
 ## Roadmap
 
 - [x] Device data transfer

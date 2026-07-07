@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os, pylsl
 from PyInstaller.utils.hooks import collect_data_files
 
 datas = []
@@ -7,13 +8,12 @@ datas += collect_data_files('gradio')
 datas += collect_data_files('safehttpx')
 datas += collect_data_files('groovy')
 
-
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[('C:/Users/{$USER}/miniconda3/envs/yams/Lib/site-packages/pylsl/lib', '.')],
+    binaries=[(os.path.join(os.path.dirname(pylsl.__file__), 'lib'), 'pylsl/lib')],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=['pylsl'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
