@@ -151,6 +151,81 @@ def read_ac_bin_v2(filepath):
 
     return df, dt
 
+def _crc8_ecg(data: bytes) -> int:
+    """CRC-8 poly=0x07, init=0x00, no reflection — used for MAX30001 ECG frame validation."""
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x07) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc
+
+def read_ecg_bin(filepath):
+    """MAX30001 ECG: 12-byte framed protocol with sync word + CRC-8 validation.
+
+    Frame layout: [0xA5, 0xEC, type, flags, seq(4B LE), raw24(3B MSB), crc8]
+    ECG value: signed 18-bit from raw24 bits [23:6].
+    Counter (seq) increments at 512 Hz.
+    """
+    FRAME_SIZE = 12
+    SYNC = b"\xA5\xEC"
+    TYPE_SAMPLE = 0x01
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    complete_bytes = (len(data) // FRAME_SIZE) * FRAME_SIZE
+    n_frames = complete_bytes // FRAME_SIZE
+    data = data[:complete_bytes]
+
+    if n_frames == 0:
+        raise ValueError("No complete ECG frames found in file.")
+
+    seqs, ecg_vals, etags, ptags = [], [], [], []
+    bad_sync = bad_type = bad_crc = 0
+
+    for i in range(n_frames):
+        frame = data[i * FRAME_SIZE : (i + 1) * FRAME_SIZE]
+        if frame[:2] != SYNC:
+            bad_sync += 1
+            continue
+        if frame[2] != TYPE_SAMPLE:
+            bad_type += 1
+            continue
+        if _crc8_ecg(frame[2:11]) != frame[11]:
+            bad_crc += 1
+            continue
+        seq = int.from_bytes(frame[4:8], "little")
+        raw_word = int.from_bytes(frame[8:11], "big")
+        value = (raw_word >> 6) & 0x3FFFF
+        if value & (1 << 17):
+            value -= 1 << 18
+        seqs.append(seq)
+        ecg_vals.append(value)
+        etags.append(frame[3] & 0x07)
+        ptags.append((frame[3] >> 3) & 0x07)
+
+    print(f"ECG {os.path.basename(filepath)}: {n_frames} frames, "
+          f"bad_sync={bad_sync}, bad_type={bad_type}, bad_crc={bad_crc}")
+
+    df = pd.DataFrame({
+        "ECG":     np.array(ecg_vals, dtype=np.int32),
+        "ETAG":    np.array(etags, dtype=np.uint8),
+        "PTAG":    np.array(ptags, dtype=np.uint8),
+        "Counter": np.array(seqs, dtype=np.uint32),
+    })
+
+    df = df[df['Counter'] != np.iinfo(np.uint32).max]
+
+    t0, dt = get_CDCT_init(filepath)
+
+    counter_diff = np.diff(df['Counter'].astype(np.int64)) % (2**32)
+    counter_diff = np.insert(counter_diff, 0, 0)
+    df['CDCT'] = t0 + np.cumsum(counter_diff) / 512
+    df['init_CDCT'] = t0
+
+    return df, dt
+
 def read_ac_bin(filepath):
     labels = [
         "AccX", "AccY", "AccZ",
@@ -316,6 +391,8 @@ class DataExtractor():
         self.acc_labels = ["AccX", "AccY", "AccZ", "QuatX", "QuatY", "QuatZ", "ENMO", "Timestamp", "Counter"]
         self.acc_formats = ["<h", "<h", "<h", "<f", "<f", "<f", "<f", "<i", "<i"]
 
+        self.ecg_labels = ["ECG", "ETAG", "PTAG", "Counter"]
+
     def get_encoding_alias(self):
         alias_dict = {}
         for i in range(len(self.df.index)):
@@ -325,7 +402,7 @@ class DataExtractor():
 
     def run(self):
         ids = self.obtain_predix_ids()
-        for id in ids:            
+        for id in ids:
             search_prefix = id + "ac"
             file_name = search_prefix + (".pkl" if self.save_format == "pickle" else ".csv")
             self.extract_csv(search_prefix, file_name, self.acc_labels, self.acc_formats, id=id)
@@ -333,6 +410,10 @@ class DataExtractor():
             search_prefix = id + "ppg"
             file_name = search_prefix + (".pkl" if self.save_format == "pickle" else ".csv")
             self.extract_csv(search_prefix, file_name, self.ppg_labels, self.ppg_formats, id=id)
+
+            search_prefix = id + "ecg"
+            file_name = search_prefix + (".pkl" if self.save_format == "pickle" else ".csv")
+            self.extract_csv(search_prefix, file_name, self.ecg_labels, formats=None, id=id)
 
     def extract_csv(self, search_prefix, file_name, labels, formats, id=-1):
         self.generate_csv_for_pattern(self.in_dir, file_name, search_prefix, labels, formats, out_dir=self.out_dir, id=id)
@@ -376,7 +457,7 @@ class DataExtractor():
             if self.save_format == "pickle":
                 data_set.to_pickle(out_path)
             else:
-                data_set.to_csv(out_path)
+                data_set.to_csv(out_path, index=False)
 
     def collect_all_data_by_prefix(self, path, prefix: str, labels: list[str], types: list[str]):
         files = gather_files_by_prefix(prefix, path)  
@@ -387,8 +468,12 @@ class DataExtractor():
             full_path = os.path.join(path, file)
             if 'ppg' in file:
                 df, dt = read_ppg_bin_v2(full_path) if self.use_new_format else read_ppg_bin(full_path)
+            elif 'ecg' in file:
+                df, dt = read_ecg_bin(full_path)
             elif 'ac' in file:
                 df, dt = read_ac_bin_v2(full_path) if self.use_new_format else read_ac_bin(full_path)
+            else:
+                continue
             all_df.append(df)
 
         return pd.concat(all_df)

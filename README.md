@@ -133,23 +133,42 @@ python -m yams.data_extraction -i "data_in" -o "data_out"
 | `--force_new_format` | off | Force v4.7.0+ binary layout regardless of `uuid.txt` version |
 | `--mode` | `dir` | `dir`: single folder of `.bin` files; `batch`: folder of `.zip` archives |
 
+**Data type detection** — the extractor scans the input folder and processes whichever file types are present:
+
+| File pattern | Sensor | Output |
+|---|---|---|
+| `[id]ac*.bin` | IMU (AccX/Y/Z, QuatX/Y/Z, ENMO) | `[id]ac.csv` |
+| `[id]ppg*.bin` | PPG (ir1, ir2, g1, g2) | `[id]ppg.csv` |
+| `[id]ecg*.bin` | MAX30001 ECG (ECG, ETAG, PTAG) | `[id]ecg.csv` |
+
+A single run extracts all types present. Missing types are silently skipped.
+
 **Examples:**
 
 ```bash
-# Basic extraction
-python -m yams.data_extraction -i "data_in" -o "data_out"
+# Wristband (AC + PPG) — firmware auto-detected from uuid.txt
+python -m yams.data_extraction -i "data/subject01" -o "out/subject01"
+
+# Wristband on v4.7.0+ firmware (force if uuid.txt is absent or reports wrong version)
+python -m yams.data_extraction -i "data/subject01" -o "out/subject01" --force_new_format
+
+# ECG only folder (e.g. data/260708_ecg containing ecg*.bin)
+python -m yams.data_extraction -i "data/260708_ecg" -o "out/ecg" --ignore_id
+
+# Mixed folder with both wristband and ECG files
+python -m yams.data_extraction -i "data/session01" -o "out/session01" --force_new_format --ignore_id
 
 # Save as pickle, skip ID parsing
-python -m yams.data_extraction -i "data_in" -o "data_out" --save_format pickle --ignore_id
-
-# Force new format on a device reporting an older version
-python -m yams.data_extraction -i "data_in" -o "data_out" --ignore_id --force_new_format
+python -m yams.data_extraction -i "data/subject01" -o "out/subject01" --save_format pickle --ignore_id
 
 # Batch extract a folder of zip archives
 python -m yams.data_extraction -i "data_in" --mode batch
 ```
 
-The device version is read automatically from `uuid.txt` in the input directory. If v4.7.0+, the new binary layout (uint32 PPG, quaternion IMU, 32-bit counter at 512 Hz) is used; otherwise the legacy layout is used.
+**Notes:**
+- The device version is read automatically from `uuid.txt`. If v4.7.0+, the new binary layout (uint32 PPG, quaternion IMU, 32-bit counter at 512 Hz) is used for AC/PPG; otherwise the legacy layout is used. Use `--force_new_format` to override.
+- ECG binary format (`ecg*.bin`) is always parsed the same way regardless of firmware version — it uses 12-byte CRC-validated frames with a 512 Hz sequence counter.
+- ECG output columns: `ECG` (signed 18-bit ADC count), `ETAG` (0 = valid sample, 2 = leads off), `PTAG`, `Counter`, `CDCT`, `Datetime`.
 
 ## Roadmap
 
