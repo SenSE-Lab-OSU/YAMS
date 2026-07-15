@@ -142,8 +142,8 @@ class FileDownloader():
 
             for f in file_list:
                 f = os.path.basename(f)
-                if 'ac' in f:
-                    match = re.match(r'(?:(\d+))?ac(\d+)\.bin$', f)
+                if 'ac' in f or 'ecg' in f:
+                    match = re.match(r'(?:(\d+))?(?:ac|ecg)(\d+)\.bin$', f)
                     if match:
                         encoding = match.group(1)  # can be None
                         timestamp = int(match.group(2))
@@ -247,8 +247,8 @@ def get_available_files(src_path, src_path_grp):
 
         for f in file_list:
             f = os.path.basename(f)
-            if 'ac' in f:
-                match = re.match(r'(?:(\d+))?ac(\d+)\.bin$', f)
+            if 'ac' in f or 'ecg' in f:
+                match = re.match(r'(?:(\d+))?(?:ac|ecg)(\d+)\.bin$', f)
                 if match:
                     encoding = match.group(1)  # can be None
                     timestamp = int(match.group(2))
