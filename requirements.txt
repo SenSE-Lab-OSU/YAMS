@@ -5,3 +5,5 @@ apscheduler
 matplotlib
 simplepyble
 pylsl
+scipy
+pandas

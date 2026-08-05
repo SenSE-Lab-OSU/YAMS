@@ -5,6 +5,7 @@ from yams.file_extractor import FileDownloader
 from yams.data_explorer import DataExplorer
 from yams.data_extraction import data_extraction_interface, data_extraction_pro_interface
 from yams.msense_collector import MsenseController, session_manager_interface
+from yams.msense_yams_sync import sync_interface
 from yams.config import __version__
 
 def main():
@@ -26,6 +27,8 @@ def main():
             data_extraction_interface()
         with gr.Tab("🛠️ Data extractor pro"):
             data_extraction_pro_interface()
+        with gr.Tab("⏱️ Clock Sync"):
+            sync_interface()
         with gr.Tab("📒 Extensions"):
             with gr.Accordion(label="📒 Device manager"):
                 device_manager_interface()

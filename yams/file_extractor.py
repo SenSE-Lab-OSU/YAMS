@@ -2,15 +2,27 @@ import gradio as gr
 from glob import glob
 import os
 import shutil
-from tqdm import tqdm 
+from tqdm import tqdm
 import time
 import zipfile
 import tempfile
 import psutil
 import re
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from yams.data_extraction import extract_zip
+
+
+def _copy_drive(dev_name, file_list, dst_dir):
+    """Copy all matched files for one drive into dst_dir/dev_name/. Returns file count."""
+    dest = os.path.join(dst_dir, dev_name)
+    os.makedirs(dest, exist_ok=True)
+    for src_path in file_list:
+        dst_path = os.path.join(dest, os.path.basename(src_path))
+        print(src_path, "->", dst_path)
+        shutil.copy(src_path, dst_path)
+    return len(file_list)
 
 class FileDownloader():
     def __init__(self):
@@ -55,64 +67,81 @@ class FileDownloader():
                                                         confirm_btn])
         
     def download_selected_files(self, enc_list, auto_extract=False, force_new_format=False):
+        # Build per-drive file lists; include drive index in fallback name to avoid key
+        # collisions when multiple drives lack a uuid.txt (same timestamp → same key).
+        mac_pattern = r'(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}'
         all_matched = {}
-        for src_path, src_files in self.all_files.items():
+        for i, (src_path, src_files) in enumerate(self.all_files.items()):
             matched_files = []
-            mac_addr = f"dev-{time.strftime("%y%m%d%H%M")}"
+            mac_addr = f"dev{i}-{time.strftime('%y%m%d%H%M')}"
             print(src_files)
             for file in src_files:
                 f = os.path.basename(file)
 
-                # include uuid.txt and mac addr
-                if f.endswith("uuid.txt"): 
+                if f.endswith("uuid.txt"):
                     matched_files.append(file)
-
-                    mac_pattern = r'(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}'
                     with open(file, 'r') as uuid_file:
                         content = uuid_file.read()
-                        mac_addr = re.findall(mac_pattern, content)
-                        if len(mac_addr) > 0: 
-                            mac_addr = mac_addr[0]
-                            mac_addr = look_up_device_name(mac_addr).replace(':', '-')
+                    found = re.findall(mac_pattern, content)
+                    if found:
+                        mac_addr = look_up_device_name(found[0]).replace(':', '-')
                     continue
 
-                # include bin file with desired encoding prefixed
                 if any(f.startswith(enc) for enc in enc_list) and f.endswith('.bin'):
                     matched_files.append(file)
 
             all_matched[mac_addr] = matched_files
-            print(all_matched)
 
-        # start copying
+        num_drives = len(all_matched)
+        total_files = sum(len(v) for v in all_matched.values())
+        print(all_matched)
+
+        progress = gr.Progress()
+        progress(0, desc=f"Starting parallel copy from {num_drives} drive(s), {total_files} files total...")
+
         with tempfile.TemporaryDirectory() as dst_dir:
-            num_src_dirs = len(all_matched.keys())
-            for i, (dev_name, file_list) in enumerate(all_matched.items()):
-                gr.Info(f"Start file extraction {i+1} / {num_src_dirs}...")
-                progress = gr.Progress()
-                progress(0, desc=f"Start copying {len(file_list)} files for drive {i+1} / {num_src_dirs}...")
+            copied = 0
+            failed_drives = []
 
-                os.makedirs(os.path.join(dst_dir, dev_name))
+            with ThreadPoolExecutor(max_workers=min(num_drives, 4)) as executor:
+                futures = {
+                    executor.submit(_copy_drive, dev_name, file_list, dst_dir): dev_name
+                    for dev_name, file_list in all_matched.items()
+                }
+                for future in as_completed(futures):
+                    dev_name = futures[future]
+                    try:
+                        n = future.result()
+                        copied += n
+                        frac = copied / total_files if total_files > 0 else 1.0
+                        progress(frac, desc=f"Copied {copied} / {total_files} files ({dev_name} done)...")
+                    except Exception as e:
+                        failed_drives.append(dev_name)
+                        gr.Warning(f"Drive {dev_name} failed: {e}")
+                        print(f"Drive {dev_name} error: {e}")
 
-                for src_path in progress.tqdm(file_list, desc=f"copying data {i+1} / {num_src_dirs}... consider getting a coffee..."):
-                    dst_path = os.path.join(dst_dir, dev_name, os.path.basename(src_path))
-                    print(src_path, dst_path)
-                    shutil.copy(src_path, dst_path)
+            if failed_drives and copied == 0:
+                msg = f"All drives failed: {', '.join(failed_drives)}"
+                return msg, gr.DownloadButton(label="No data to be downloaded", interactive=False)
 
             # zipping up
-            zip_filename = os.path.join(tempfile.gettempdir(), f"{time.strftime("%y%m%d%H%M")}_msense.zip")
+            zip_filename = os.path.join(tempfile.gettempdir(), f"{time.strftime('%y%m%d%H%M')}_msense.zip")
             with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, _, files in os.walk(dst_dir):
                     for file in files:
                         full_path = os.path.join(root, file)
                         arcname = os.path.relpath(full_path, dst_dir)
-                        zipf.write(full_path, arcname=arcname)
+                        zipf.write(full_path, arcname)
+
+            status = f"Copied {copied} files from {num_drives - len(failed_drives)} / {num_drives} drive(s)."
+            if failed_drives:
+                status += f" Failed: {', '.join(failed_drives)}."
 
             if auto_extract:
-                progress = gr.Progress()
-                progress(0, desc=f"Extracting data. Please wait...")
-                return "File ready", extract_zip(zip_filename, force_new_format=force_new_format)
+                progress(0, desc="Extracting data. Please wait...")
+                return status, extract_zip(zip_filename, force_new_format=force_new_format)
             else:
-                return "File ready", gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
+                return status, gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
 
 
     def get_available_files(self, src_path, src_path_grp):
