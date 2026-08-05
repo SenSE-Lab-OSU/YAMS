@@ -15,7 +15,9 @@ dependencies = [
     "apscheduler",
     "matplotlib",
     "simplepyble",
-    "pylsl"
+    "pylsl",
+    "scipy",
+    "pandas"
 ]
 description = "Yet Another MotionSenSE Service Utility"
 readme = "README.md"
