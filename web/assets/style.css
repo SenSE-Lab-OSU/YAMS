@@ -1,0 +1,243 @@
+/* YAMS landing page.
+   Ink is #6900BE, sampled from the logo. The mark is line art, so the page is
+   hairline borders and whitespace rather than shadows and filled cards. */
+
+/* ---------- tokens ------------------------------------------------------ */
+/* Each colour is written once, as a -l (light) or -d (dark) constant. The three
+   blocks below only ever re-point the active token at one of those, so a value
+   can never drift between the system-preference path and the toggle path. */
+:root {
+  --ink-l:        #6900BE;  --ink-d:        #B57BFF;
+  --ink-strong-l: #55009B;  --ink-strong-d: #C79BFF;
+  --ink-soft-l:   #F3E9FC;  --ink-soft-d:   #241A33;
+  --bg-l:         #FFFDFB;  --bg-d:         #17151A;
+  --surface-l:    #F7F3F0;  --surface-d:    #201C26;
+  --text-l:       #221E26;  --text-d:       #EDE9F2;
+  --muted-l:      #6B6472;  --muted-d:      #A79FB0;
+  --line-l:       #E4DCD6;  --line-d:       #332C3D;
+  --code-bg-l:    #F4EFEC;  --code-bg-d:    #1D1922;
+
+  --radius: 12px;
+  --maxw: 1080px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* default: light */
+:root {
+  color-scheme: light;
+  --ink: var(--ink-l); --ink-strong: var(--ink-strong-l); --ink-soft: var(--ink-soft-l);
+  --bg: var(--bg-l); --surface: var(--surface-l); --text: var(--text-l);
+  --muted: var(--muted-l); --line: var(--line-l); --code-bg: var(--code-bg-l);
+}
+
+/* system says dark, and the reader has not explicitly chosen light */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: var(--ink-d); --ink-strong: var(--ink-strong-d); --ink-soft: var(--ink-soft-d);
+    --bg: var(--bg-d); --surface: var(--surface-d); --text: var(--text-d);
+    --muted: var(--muted-d); --line: var(--line-d); --code-bg: var(--code-bg-d);
+  }
+}
+
+/* explicit choice wins over the system in both directions */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: var(--ink-d); --ink-strong: var(--ink-strong-d); --ink-soft: var(--ink-soft-d);
+  --bg: var(--bg-d); --surface: var(--surface-d); --text: var(--text-d);
+  --muted: var(--muted-d); --line: var(--line-d); --code-bg: var(--code-bg-d);
+}
+
+/* ---------- base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation: none !important; transition: none !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 .5em; }
+h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); font-weight: 700; }
+h2 { font-size: clamp(1.5rem, 3.5vw, 2rem); font-weight: 650; }
+h3 { font-size: 1.06rem; font-weight: 650; }
+p  { margin: 0 0 1rem; }
+
+a { color: var(--ink); text-decoration-color: color-mix(in srgb, var(--ink) 35%, transparent); text-underline-offset: 3px; }
+a:hover { color: var(--ink-strong); text-decoration-color: currentColor; }
+
+code { font-family: var(--mono); font-size: .88em; }
+
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+
+.skip {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--ink); color: #fff; padding: .6rem 1rem; z-index: 100; border-radius: 0 0 8px 0;
+}
+.skip:focus { left: 0; }
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
+
+/* ---------- header ------------------------------------------------------ */
+.site-header {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.site-header .wrap { display: flex; align-items: center; gap: 1.5rem; height: 4rem; }
+
+.brand { display: flex; align-items: center; gap: .55rem; font-weight: 680; letter-spacing: -.01em; text-decoration: none; color: var(--text); }
+.brand img { width: 26px; height: 26px; }
+
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 1.4rem; }
+
+.theme-toggle {
+  flex: none;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: transparent; color: var(--muted);
+  cursor: pointer; padding: 0;
+}
+.theme-toggle:hover { color: var(--ink); border-color: var(--ink); }
+.theme-toggle svg { width: 17px; height: 17px; display: block; }
+/* Show the icon for the mode the button switches *to*. */
+.theme-toggle .i-sun { display: none; }
+.theme-toggle .i-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .i-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .i-moon { display: none; }
+}
+:root[data-theme="dark"] .theme-toggle .i-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .i-moon { display: none; }
+
+.nav { display: flex; gap: 1.4rem; font-size: .93rem; }
+.nav a { color: var(--muted); text-decoration: none; white-space: nowrap; }
+.nav a:hover { color: var(--ink); }
+/* The nav does not wrap, so on narrow screens it would set a minimum document
+   width and force the whole page to scroll sideways. Drop links instead. */
+@media (max-width: 760px) { .nav a.opt { display: none; } }
+@media (max-width: 560px) { .nav { gap: 1.1rem; } .nav a.opt-sm { display: none; } }
+
+/* ---------- hero -------------------------------------------------------- */
+.hero { text-align: center; padding: 4.5rem 0 3.5rem; border-bottom: 1px solid var(--line); }
+.hero img.mark { width: clamp(120px, 22vw, 168px); height: auto; margin-bottom: 1.5rem; }
+.hero .tagline { font-size: clamp(1.02rem, 2.3vw, 1.2rem); color: var(--muted); max-width: 34rem; margin: 0 auto 2rem; }
+.hero .meta { margin-top: 1.6rem; font-size: .85rem; color: var(--muted); }
+.hero .meta span + span::before { content: "·"; margin: 0 .5rem; opacity: .6; }
+
+.cta { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; align-items: stretch; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .7rem 1.3rem; border-radius: var(--radius);
+  font-weight: 600; font-size: .95rem; text-decoration: none;
+  border: 1px solid var(--ink); color: #fff; background: var(--ink);
+  transition: transform .12s ease, background .12s ease;
+}
+.btn:hover { background: var(--ink-strong); border-color: var(--ink-strong); color: #fff; transform: translateY(-1px); }
+.btn.ghost { background: transparent; color: var(--ink); }
+.btn.ghost:hover { background: var(--ink-soft); color: var(--ink-strong); }
+
+/* ---------- sections ---------------------------------------------------- */
+section { padding: 4rem 0; border-bottom: 1px solid var(--line); }
+section > .wrap > h2 { margin-bottom: .35rem; }
+.lede { color: var(--muted); max-width: 42rem; margin-bottom: 2.25rem; }
+
+.eyebrow {
+  display: inline-block; font-size: .74rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink); margin-bottom: .7rem;
+}
+
+/* ---------- cards ------------------------------------------------------- */
+.grid { display: grid; gap: 1rem; }
+.grid.cols-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid.cols-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
+.card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.35rem; background: var(--bg);
+  transition: border-color .15s ease;
+}
+.card:hover { border-color: color-mix(in srgb, var(--ink) 45%, var(--line)); }
+.card h3 { margin-bottom: .3rem; }
+.card p { margin: 0; color: var(--muted); font-size: .93rem; }
+.card .tab-name { font-family: var(--mono); font-size: .82rem; color: var(--ink); display: block; margin-bottom: .55rem; }
+
+/* ---------- code -------------------------------------------------------- */
+.code {
+  position: relative;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 0 0 1rem;
+}
+.code pre {
+  margin: 0; padding: .9rem 3.2rem .9rem 1rem;
+  overflow-x: auto; font-family: var(--mono); font-size: .87rem; line-height: 1.6;
+}
+/* Inside the narrow install cards a long clone URL would scroll under the copy
+   button. Wrapping reads better than a scrollbar for a list of shell commands. */
+.card .code pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding-right: 1rem;
+  padding-top: 2.4rem;
+}
+.card .code .copy { top: .45rem; right: .45rem; }
+.code .copy {
+  position: absolute; top: .5rem; right: .5rem;
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  border-radius: 7px; padding: .28rem .55rem; font-size: .74rem; font-family: var(--sans);
+  cursor: pointer;
+}
+.code .copy:hover { color: var(--ink); border-color: var(--ink); }
+.code .copy[data-done="1"] { color: var(--ink); border-color: var(--ink); }
+
+/* ---------- steps ------------------------------------------------------- */
+.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; }
+.steps > li { counter-increment: s; position: relative; padding-left: 3rem; margin-bottom: 2rem; }
+.steps > li::before {
+  content: counter(s);
+  position: absolute; left: 0; top: -.1rem;
+  width: 2rem; height: 2rem; border-radius: 50%;
+  border: 1px solid var(--ink); color: var(--ink);
+  display: grid; place-items: center; font-size: .85rem; font-weight: 680;
+}
+.steps h3 { margin-bottom: .25rem; }
+.steps p { color: var(--muted); font-size: .95rem; }
+
+/* ---------- note -------------------------------------------------------- */
+.note {
+  border: 1px solid var(--line); border-left: 3px solid var(--ink);
+  border-radius: 8px; background: var(--surface);
+  padding: 1rem 1.15rem; font-size: .93rem; margin: 0 0 1.25rem;
+}
+.note strong { color: var(--ink); }
+.note :last-child { margin-bottom: 0; }
+
+/* ---------- table ------------------------------------------------------- */
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 460px; }
+th, td { text-align: left; padding: .65rem .9rem; border-bottom: 1px solid var(--line); }
+th { font-weight: 650; background: var(--surface); }
+tr:last-child td { border-bottom: 0; }
+td code { color: var(--ink); }
+
+/* ---------- footer ------------------------------------------------------ */
+.site-footer { padding: 2.75rem 0 3.5rem; font-size: .9rem; color: var(--muted); }
+.site-footer .links { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1.25rem; }
+.site-footer .links a { text-decoration: none; }
+.site-footer .links a:hover { text-decoration: underline; }
