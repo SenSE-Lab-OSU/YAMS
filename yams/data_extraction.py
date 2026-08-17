@@ -17,6 +17,17 @@ from glob import glob
 import shutil
 from tqdm import tqdm
 
+from yams import detect, formats
+from yams.detect import Resolution
+from yams.extraction_options import (
+    AC_FORMAT_CHOICES,
+    CONFLICT_CHOICES,
+    ECG_FORMAT_CHOICES,
+    PPG_FORMAT_CHOICES,
+    ExtractionOptions,
+    ExtractionOptionsPanel,
+)
+
 def get_participant_ids(folder_path):
     prefixes = set()
     for filename in os.listdir(folder_path):
@@ -43,443 +54,40 @@ def get_device_version(folder_path):
         return tuple(int(x) for x in match.groups())
     return (0, 0, 0)
 
-def get_CDCT_init(file_path):
-    filename = os.path.basename(file_path)
-    pattern = r'\d*[A-Za-z]+(\d+)\.bin$'
-    match = re.search(pattern, filename)
-    
-    t0 = 0
-    if match:
-        t0 = int(match.group(1))
-
-    return t0, datetime.fromtimestamp(int(t0), UTC).strftime("%Y/%m/%d %H:%M:%S")
-
-def read_ppg_bin(filepath):
-    labels = ["ir1", "ir2", "g1", "g2", "Timestamp", "Counter"]
-    record_format = "<6i"       
-    record_size = struct.calcsize(record_format)
-
-    with open(filepath, "rb") as f:
-        data = f.read()
-
-    n_records = len(data) // record_size
-    data = data[: n_records * record_size]
-
-    if n_records == 0:
-        raise ValueError("No valid records found in file.")
-
-    records = struct.iter_unpack(record_format, data)
-    arr = np.array(list(records), dtype=np.int32)
-
-    df = pd.DataFrame(arr, columns=labels)
-    df = df.replace(-1, np.nan).dropna(how='all')
-
-    t0, dt = get_CDCT_init(filepath)
-
-    counter_diff = np.diff(df['Counter']) % (2^16 - 1)
-    counter_diff = np.insert(counter_diff, 0, 0)
-    df['CDCT'] = t0 + np.cumsum(counter_diff) / 320
-    df['init_CDCT'] = t0
-
-    return df, dt
-
-def read_ppg_bin_v2(filepath):
-    """v4.7.0+: 4x uint32 ppg + uint32 global_tick_512hz, no Timestamp field."""
-    labels = ["ir1", "ir2", "g1", "g2", "Counter"]
-    record_format = "<5I"
-    record_size = struct.calcsize(record_format)
-
-    with open(filepath, "rb") as f:
-        data = f.read()
-
-    n_records = len(data) // record_size
-    data = data[: n_records * record_size]
-
-    if n_records == 0:
-        raise ValueError("No valid records found in file.")
-
-    records = struct.iter_unpack(record_format, data)
-    arr = np.array(list(records), dtype=np.uint32)
-
-    df = pd.DataFrame(arr, columns=labels)
-    df = df[df['Counter'] != np.iinfo(np.uint32).max]
-
-    t0, dt = get_CDCT_init(filepath)
-
-    counter_diff = np.diff(df['Counter'].astype(np.int64)) % (2**32)
-    counter_diff = np.insert(counter_diff, 0, 0)
-    df['CDCT'] = t0 + np.cumsum(counter_diff) / 512
-    df['init_CDCT'] = t0
-
-    return df, dt
-
 # ---------------------------------------------------------------------------
-# Packed 16-byte PPG record — see data/PPG_PACKED_16_BYTE_FORMAT.md
-#
-# Not tied to a device version: firmware carrying this format is identified by
-# the operator, not by uuid.txt, so it is selected with an explicit toggle.
+# Record layouts and format resolution now live in yams.formats / yams.detect.
+# Re-exported here because the packed16 unit tests and external callers import
+# these names from this module.
 # ---------------------------------------------------------------------------
-PPG_PACKED_RECORD_SIZE = 16
-PPG_PACKED_SAMPLE_MASK = 0x7FFFF
-PPG_PACKED_RESERVED_MASK = 0xFFF80000   # bits 19..31 must be clear in every channel
-
-PPG_FORMAT_CHOICES = ["auto", "legacy", "v2", "packed16", "sniff"]
-
-PPG_FORMAT_HELP = """## Data extraction pro mode
-
-### PPG record format
-
-| Choice | Record | Meaning |
-|---|---|---|
-| `auto` | — | Follow `uuid.txt` (v4.7.0+ → `v2`, otherwise `legacy`). Default. |
-| `legacy` | 24 B | `6x int32`: ir1, ir2, g1, g2, Timestamp, Counter @ 320 Hz |
-| `v2` | 20 B | `5x uint32`: ir1, ir2, g1, g2, global tick @ 512 Hz |
-| `packed16` | 16 B | `4x uint24` channels + `uint32` global tick @ 512 Hz (experimental) |
-| `sniff` | — | Detect from file contents; falls back to `auto` if inconclusive |
-
-`packed16` firmware carries no distinguishing version number, so it has to be
-selected explicitly (or sniffed). It only affects PPG — IMU and ECG still follow
-the device version / "Force v4.7.0+ format" checkbox.
-
-The tick is written to the `Counter` column for every format, so Clock Sync
-works on `packed16` output unchanged.
-
-**Strict PPG validation**: raise on a record whose reserved channel bits are set
-(or on a partial trailing record) instead of dropping it and reporting a count.
-"""
-
-
-def _u24_le(cols):
-    """Assemble little-endian uint24 from an (N, 3) uint8 array."""
-    return (cols[:, 0].astype(np.uint32)
-            | cols[:, 1].astype(np.uint32) << 8
-            | cols[:, 2].astype(np.uint32) << 16)
-
-
-def _u32_le(cols):
-    """Assemble little-endian uint32 from an (N, 4) uint8 array."""
-    return (cols[:, 0].astype(np.uint32)
-            | cols[:, 1].astype(np.uint32) << 8
-            | cols[:, 2].astype(np.uint32) << 16
-            | cols[:, 3].astype(np.uint32) << 24)
-
-
-def _ppg_packed_records(data):
-    """Whole records only, with the trailing erased block removed.
-
-    NAND files may end with preallocated all-0xFF records. Only complete
-    trailing erased records are trimmed — interior ones are kept so they show up
-    in the malformed count instead of silently shifting every later record.
-    """
-    n_records = len(data) // PPG_PACKED_RECORD_SIZE
-    b = np.frombuffer(data[: n_records * PPG_PACKED_RECORD_SIZE], dtype=np.uint8)
-    b = b.reshape(-1, PPG_PACKED_RECORD_SIZE)
-
-    if b.shape[0] == 0:
-        return b
-
-    written = np.flatnonzero(~(b == 0xFF).all(axis=1))
-    if written.size == 0:
-        return b[:0]
-    return b[: written[-1] + 1]
-
-
-def decode_ppg_packed16(data):
-    """Vectorized decode of the packed 16-byte PPG record.
-
-    Layout, all little-endian: 4x uint24 channel (ir1, ir2, g1, g2) followed by
-    the uint32 512 Hz global tick. Channels carry 19 meaningful bits.
-
-    Returns (ir1, ir2, g1, g2, tick, malformed) — five uint32 arrays plus a bool
-    mask marking records whose reserved channel bits are set.
-    """
-    b = _ppg_packed_records(data)
-    ir1, ir2, g1, g2 = (_u24_le(b[:, i:i + 3]) for i in (0, 3, 6, 9))
-    tick = _u32_le(b[:, 12:16])
-    malformed = ((ir1 | ir2 | g1 | g2) & PPG_PACKED_RESERVED_MASK) != 0
-    return ir1, ir2, g1, g2, tick, malformed
-
-
-def read_ppg_bin_packed16(filepath, strict=False):
-    """Packed 16-byte PPG record: 4x uint24 channel + uint32 global_tick_512hz.
-
-    The tick is exposed as 'Counter' to match the rest of the pipeline (the
-    Clock Sync tab and counter_validity_check both key on that name); it is the
-    same 512 Hz tick the v4.7.0+ format carries.
-
-    Malformed records are dropped and reported by default; strict=True raises.
-    """
-    with open(filepath, "rb") as f:
-        data = f.read()
-
-    remainder = len(data) % PPG_PACKED_RECORD_SIZE
-    if remainder:
-        msg = (f"PPG {os.path.basename(filepath)}: {len(data)} bytes is not divisible by "
-               f"{PPG_PACKED_RECORD_SIZE}; {remainder} trailing byte(s) ignored")
-        if strict:
-            raise ValueError(msg)
-        print(msg)
-
-    ir1, ir2, g1, g2, tick, malformed = decode_ppg_packed16(data)
-
-    if len(ir1) == 0:
-        raise ValueError("No valid records found in file.")
-
-    n_bad = int(malformed.sum())
-    if n_bad:
-        msg = (f"PPG {os.path.basename(filepath)}: {n_bad}/{len(malformed)} records have "
-               f"nonzero reserved channel bits")
-        if strict:
-            raise ValueError(msg)
-        print(msg + " — dropped")
-
-    keep = ~malformed
-    df = pd.DataFrame({
-        "ir1": ir1[keep],
-        "ir2": ir2[keep],
-        "g1": g1[keep],
-        "g2": g2[keep],
-        "Counter": tick[keep],
-    })
-    df = df[df['Counter'] != np.iinfo(np.uint32).max]
-
-    if df.empty:
-        # Wrong layout selected, or a wholly corrupt file: say so instead of
-        # emitting a single all-NaN row.
-        raise ValueError(
-            f"{os.path.basename(filepath)}: no usable records after decoding "
-            f"{len(malformed)} packed 16-byte records ({n_bad} malformed). "
-            "Is this file really in the packed 16-byte PPG format?")
-
-    t0, dt = get_CDCT_init(filepath)
-
-    counter_diff = np.diff(df['Counter'].astype(np.int64)) % (2**32)
-    counter_diff = np.insert(counter_diff, 0, 0)
-    df['CDCT'] = t0 + np.cumsum(counter_diff) / 512
-    df['init_CDCT'] = t0
-
-    df.attrs['malformed_records'] = n_bad
-    df.attrs['trailing_bytes'] = remainder
-
-    return df, dt
+get_CDCT_init = formats.get_CDCT_init
+read_bin = formats.read_bin
+decode_ppg_packed16 = formats.decode_ppg_packed16
+read_ppg_bin_packed16 = formats.read_ppg_bin_packed16
+PPG_PACKED_RECORD_SIZE = formats.PPG_PACKED_RECORD_SIZE
+PPG_PACKED_SAMPLE_MASK = formats.PPG_PACKED_SAMPLE_MASK
+PPG_PACKED_RESERVED_MASK = formats.PPG_PACKED_RESERVED_MASK
 
 
 def sniff_ppg_format(filepath, n_probe=2000, threshold=0.9):
-    """Guess a PPG file's record layout from its contents.
-
-    There is no version number to key the packed format on, so the fallback is
-    to test each layout against the file: read the tick field at the offset that
-    layout implies and see whether it advances at the expected rate. The packed
-    hypothesis is additionally disqualified if any channel's reserved bits are
-    set. Returns the winning format name, or None if nothing scored above
-    `threshold` (caller should fall back to the version-based choice).
-    """
-    with open(filepath, "rb") as f:
-        data = f.read(n_probe * 24)
-
-    def score(record_size, tick_slice, expected_step, check_reserved=False):
-        n = len(data) // record_size
-        if n < 3:
-            return 0.0
-        b = np.frombuffer(data[: n * record_size], dtype=np.uint8).reshape(n, record_size)
-        b = b[~(b == 0xFF).all(axis=1)]   # erased records say nothing about the layout
-        if b.shape[0] < 3:
-            return 0.0
-        tick = _u32_le(b[:, tick_slice])
-        delta = np.diff(tick.astype(np.int64)) % (2**32)
-        s = float(np.mean(delta == expected_step))
-        if check_reserved:
-            # Scale by the share of clean records rather than disqualifying on a
-            # single set bit, so one corrupt record can't veto the right answer.
-            channels = np.stack([_u24_le(b[:, i:i + 3]) for i in (0, 3, 6, 9)])
-            s *= float(np.mean((channels & PPG_PACKED_RESERVED_MASK) == 0))
-        return s
-
-    scores = {
-        "packed16": score(PPG_PACKED_RECORD_SIZE, slice(12, 16), 2, check_reserved=True),
-        "v2":       score(20, slice(16, 20), 2),
-        "legacy":   score(24, slice(20, 24), 5),
-    }
-    print("PPG format sniff: " + ", ".join(f"{k}={v:.3f}" for k, v in scores.items()))
-
-    best = max(scores, key=scores.get)
-    return best if scores[best] >= threshold else None
+    """Detect a PPG file's layout from its contents. None if inconclusive."""
+    return detect.sniff_file(filepath, "ppg", threshold=threshold)
 
 
-def read_ac_bin_v2(filepath):
-    """v4.7.0+: 3x int16 accel + 3x float32 (quaternion, reported as GyroX/Y/Z) + float32 enmo + uint32 global_tick_512hz, no Timestamp field."""
-    labels = ["AccX", "AccY", "AccZ", "QuatX", "QuatY", "QuatZ", "ENMO", "Counter"]
-
-    record_format = "<3h4fI"
-    record_size = struct.calcsize(record_format)
-
-    with open(filepath, "rb") as f:
-        data = f.read()
-
-    n_records = len(data) // record_size
-    data = data[: n_records * record_size]
-
-    if n_records == 0:
-        raise ValueError("No valid records found in file.")
-
-    records = struct.iter_unpack(record_format, data)
-    arr = list(records)
-
-    dtype = np.dtype([
-        ("AccX", np.int16), ("AccY", np.int16), ("AccZ", np.int16),
-        ("QuatX", np.float32), ("QuatY", np.float32), ("QuatZ", np.float32),
-        ("ENMO", np.float32), ("Counter", np.uint32),
-    ])
-
-    arr = np.array(arr, dtype=dtype)
-    df = pd.DataFrame(arr)
-    df = df[df['Counter'] != np.iinfo(np.uint32).max]
-
-    t0, dt = get_CDCT_init(filepath)
-
-    counter_diff = np.diff(df['Counter'].astype(np.int64)) % (2**32)
-    counter_diff = np.insert(counter_diff, 0, 0)
-    df['CDCT'] = t0 + np.cumsum(counter_diff) / 512
-    df['init_CDCT'] = t0
-
-    return df, dt
-
-def _crc8_ecg(data: bytes) -> int:
-    """CRC-8 poly=0x07, init=0x00, no reflection — used for MAX30001 ECG frame validation."""
-    crc = 0
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            crc = ((crc << 1) ^ 0x07) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
-    return crc
-
-def read_ecg_bin(filepath):
-    """MAX30001 ECG: 12-byte framed protocol with sync word + CRC-8 validation.
-
-    Frame layout: [0xA5, 0xEC, type, flags, seq(4B LE), raw24(3B MSB), crc8]
-    ECG value: signed 18-bit from raw24 bits [23:6].
-    Counter (seq) increments at 512 Hz.
-    """
-    FRAME_SIZE = 12
-    SYNC = b"\xA5\xEC"
-    TYPE_SAMPLE = 0x01
-
-    with open(filepath, "rb") as f:
-        data = f.read()
-
-    complete_bytes = (len(data) // FRAME_SIZE) * FRAME_SIZE
-    n_frames = complete_bytes // FRAME_SIZE
-    data = data[:complete_bytes]
-
-    if n_frames == 0:
-        raise ValueError("No complete ECG frames found in file.")
-
-    seqs, ecg_vals, etags, ptags = [], [], [], []
-    bad_sync = bad_type = bad_crc = 0
-
-    for i in range(n_frames):
-        frame = data[i * FRAME_SIZE : (i + 1) * FRAME_SIZE]
-        if frame[:2] != SYNC:
-            bad_sync += 1
-            continue
-        if frame[2] != TYPE_SAMPLE:
-            bad_type += 1
-            continue
-        if _crc8_ecg(frame[2:11]) != frame[11]:
-            bad_crc += 1
-            continue
-        seq = int.from_bytes(frame[4:8], "little")
-        raw_word = int.from_bytes(frame[8:11], "big")
-        value = (raw_word >> 6) & 0x3FFFF
-        if value & (1 << 17):
-            value -= 1 << 18
-        seqs.append(seq)
-        ecg_vals.append(value)
-        etags.append(frame[3] & 0x07)
-        ptags.append((frame[3] >> 3) & 0x07)
-
-    print(f"ECG {os.path.basename(filepath)}: {n_frames} frames, "
-          f"bad_sync={bad_sync}, bad_type={bad_type}, bad_crc={bad_crc}")
-
-    df = pd.DataFrame({
-        "ECG":     np.array(ecg_vals, dtype=np.int32),
-        "ETAG":    np.array(etags, dtype=np.uint8),
-        "PTAG":    np.array(ptags, dtype=np.uint8),
-        "Counter": np.array(seqs, dtype=np.uint32),
-    })
-
-    df = df[df['Counter'] != np.iinfo(np.uint32).max]
-
-    t0, dt = get_CDCT_init(filepath)
-
-    counter_diff = np.diff(df['Counter'].astype(np.int64)) % (2**32)
-    counter_diff = np.insert(counter_diff, 0, 0)
-    df['CDCT'] = t0 + np.cumsum(counter_diff) / 512
-    df['init_CDCT'] = t0
-
-    return df, dt
-
-def read_ac_bin(filepath):
-    labels = [
-        "AccX", "AccY", "AccZ",
-        "QuatX", "QuatY", "QuatZ",
-        "ENMO", "Timestamp", "Counter"
-    ]
-
-    record_format = "<3h4f2i"
-    record_size = struct.calcsize(record_format)
-
-    with open(filepath, "rb") as f:
-        data = f.read()
-
-    n_records = len(data) // record_size
-    data = data[: n_records * record_size]
-
-    if n_records == 0:
-        raise ValueError("No valid records found in file.")
-
-    records = struct.iter_unpack(record_format, data)
-    arr = list(records)
-
-    dtype = np.dtype([
-        ("AccX", np.int16), ("AccY", np.int16), ("AccZ", np.int16),
-        ("QuatX", np.float32), ("QuatY", np.float32), ("QuatZ", np.float32),
-        ("ENMO", np.float32), ("Timestamp", np.int32), ("Counter", np.int32),
-    ])
-
-    arr = np.array(arr, dtype=dtype)
-    df = pd.DataFrame(arr)
-    df = df.replace(-1, np.nan).dropna(how='all')
-
-    t0, dt = get_CDCT_init(filepath)
-
-    counter_diff = np.diff(df['Counter']) % (2^16 - 1)
-    counter_diff = np.insert(counter_diff, 0, 0)
-    df['CDCT'] = t0 + np.cumsum(counter_diff) / 320
-    df['init_CDCT'] = t0
-
-    return df, dt
 
 def data_extraction_pro_interface():
     in_file = gr.File(file_types=[".zip"])
-    with gr.Row():
-        force_new_format = gr.Checkbox(False, label="Force v4.7.0+ format")
-        ppg_format = gr.Dropdown(PPG_FORMAT_CHOICES, value="auto", label="PPG record format",
-                                 info="auto = follow device version; packed16 = 16-byte packed (experimental)")
-        strict_ppg = gr.Checkbox(False, label="Strict PPG validation")
+    opts = ExtractionOptionsPanel()
     out = gr.DownloadButton(label="No data to be downloaded", interactive=False)
-    in_file.change(lambda f, fnf, pf, sp: extract_zip(f, force_new_format=fnf, ppg_format=pf, strict_ppg=sp),
-                   inputs=[in_file, force_new_format, ppg_format, strict_ppg], outputs=out)
-    with gr.Accordion(label="Help", open=False):
-        gr.Markdown(PPG_FORMAT_HELP)
+    in_file.change(opts.bind(extract_zip), inputs=[in_file] + opts.inputs, outputs=out)
 
-def batch_extract_zips(in_path, save_format="csv", ignore_id_parsing=False, ppg_format="auto", strict_ppg=False):
+def batch_extract_zips(in_path, options=None):
     zips = glob(os.path.join(in_path, "*.zip"))
     print(zips)
     for z in tqdm(zips):
-        extract_zip(z, cli_mode=True, out_dir=os.path.join(in_path, "out"), save_format=save_format, ignore_id_parsing=ignore_id_parsing, ppg_format=ppg_format, strict_ppg=strict_ppg)
+        extract_zip(z, cli_mode=True, out_dir=os.path.join(in_path, "out"), options=options)
 
-def extract_zip(zip_path, cli_mode=False, out_dir="./data", save_format="csv", ignore_id_parsing=False, force_new_format=False, ppg_format="auto", strict_ppg=False):
+def extract_zip(zip_path, cli_mode=False, out_dir="./data", options=None):
+    options = options or ExtractionOptions()
     df = get_session_encoding()
     if zip_path is not None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -491,8 +99,8 @@ def extract_zip(zip_path, cli_mode=False, out_dir="./data", save_format="csv", i
             devices = os.listdir(tmpdir)
             for dev in devices:
                 in_dir = os.path.join(tmpdir, dev)
-                main(in_dir, in_dir, legacy_fs=False, df=df, note=dev, gradio=False, save_format=save_format, ignore_id_parsing=ignore_id_parsing, force_new_format=force_new_format, ppg_format=ppg_format, strict_ppg=strict_ppg)
-                
+                main(in_dir, in_dir, df=df, note=dev, gradio=False, options=options)
+
             out_zip_path = os.path.join(tempfile.gettempdir(),
                                     os.path.basename(zip_path).replace('.zip', '_extracted.zip'))
             
@@ -528,17 +136,8 @@ def data_extraction_interface():
 
     note = gr.Text("", label="Note")
 
-    legacy_fs = gr.Checkbox(False, label="(Uncommon) legacy sampling rate")
-
-    with gr.Row():
-        save_format = gr.Radio(["csv", "pickle"], value="csv", label="Save format")
-        ignore_id = gr.Checkbox(False, label="Ignore subject/session ID parsing")
-        force_new_format = gr.Checkbox(False, label="Force v4.7.0+ format")
-
-    with gr.Row():
-        ppg_format = gr.Dropdown(PPG_FORMAT_CHOICES, value="auto", label="PPG record format",
-                                 info="auto = follow device version; packed16 = 16-byte packed (experimental)")
-        strict_ppg = gr.Checkbox(False, label="Strict PPG validation")
+    # Extraction is what this tab is for, so the panel starts open here.
+    opts = ExtractionOptionsPanel(open=True)
 
     btn = gr.Button("Extract raw data")
 
@@ -547,74 +146,70 @@ def data_extraction_interface():
         dataframe = gr.DataFrame(value=df)
 
     gradio_state = gr.State(True)
-    btn.click(main, inputs=[in_dir, out_dir, legacy_fs, dataframe, note, gradio_state, save_format, ignore_id, force_new_format, ppg_format, strict_ppg])
+    btn.click(opts.bind(main),
+              inputs=[in_dir, out_dir, dataframe, note, gradio_state] + opts.inputs)
+
+SENSOR_ORDER = ("ac", "ppg", "ecg")
+
+
+def sensor_of(filename):
+    """Which sensor a binary belongs to, by the tag in its name."""
+    for sensor in ("ppg", "ecg", "ac"):
+        if sensor in filename:
+            return sensor
+    return None
+
 
 class DataExtractor():
-    def __init__(self, in_dir, out_dir, legacy_fs=False, df=None, note="", save_format="csv", ignore_id_parsing=False, force_new_format=False, ppg_format="auto", strict_ppg=False):
-        self.device_version = get_device_version(in_dir)
-        self.use_new_format = force_new_format or (self.device_version >= (4, 7, 0))
-        print(f"device version: {'.'.join(str(x) for x in self.device_version)}, new format: {self.use_new_format} (forced: {force_new_format})")
-
-        # PPG layout is its own axis: the packed 16-byte format carries no version
-        # number, so it cannot ride on use_new_format (which still drives IMU).
-        self.requested_ppg_format = ppg_format
-        self.strict_ppg = strict_ppg
-        if ppg_format in ("auto", "sniff"):
-            self.ppg_format = "v2" if self.use_new_format else "legacy"
-        else:
-            self.ppg_format = ppg_format
-        self._ppg_format_resolved = ppg_format != "sniff"
-        self.ppg_malformed = 0
-        self.ppg_files_read = 0
-        print(f"ppg format: {self.requested_ppg_format} -> {self.ppg_format}, strict: {strict_ppg}")
-
-        if legacy_fs:
-            self.sample_tick = 200
-        else:
-            self.sample_tick = 320
-
-        self.note = note
-        self.df = df
-        self.save_format = save_format
-        self.ignore_id_parsing = ignore_id_parsing
-
-        if self.df is not None:
-            self.encoding_alias = self.get_encoding_alias()
-        else:
-            self.encoding_alias = {}
-
-        print(f"sampling tick set to {self.sample_tick}")
-
+    def __init__(self, in_dir, out_dir, df=None, note="", options=None):
+        options = options or ExtractionOptions()
+        self.options = options
         self.in_dir = in_dir
         self.out_dir = out_dir
+        self.note = note
+        self.df = df
+        self.save_format = options.save_format
+        self.ignore_id_parsing = options.ignore_id_parsing
+        self.strict = options.strict_ppg
 
-        os.makedirs(out_dir, exist_ok=True)
+        self.device_version = get_device_version(in_dir)
+        version_str = ".".join(str(x) for x in self.device_version)
+        if self.device_version == (0, 0, 0):
+            version_str += " (no uuid.txt)"
+        print(f"device version: {version_str}")
+        print("record formats: " + ", ".join(
+            f"{s}={options.format_for(s)}" for s in SENSOR_ORDER))
+
+        # Format is resolved per file, not per folder: a folder can hold captures
+        # from more than one firmware, and the resolution is evidence we keep.
+        self.resolutions = []
+        self.malformed = 0
+
+        self.encoding_alias = self.get_encoding_alias() if self.df is not None else {}
+
+        if not options.dry_run:
+            os.makedirs(out_dir, exist_ok=True)
+            self.write_readme_header()
+
+    def write_readme_header(self):
+        options = self.options
         with open(os.path.join(self.out_dir, "README.txt"), "w") as file:
             file.write(f"Raw data directory = {self.in_dir}\n")
-            file.write(f"Legacy sampling rate = {legacy_fs} (True: 25 Hz, False: 32 Hz)\n")
-            file.write(f"Save format = {save_format}\n")
-            file.write(f"Ignore subject/session ID parsing = {ignore_id_parsing}\n")
-            file.write(f"PPG record format = {ppg_format} (requested)\n")
-            file.write(f"Strict PPG record validation = {strict_ppg}\n")
-            file.write(f"I m-sense with YAMS at https://github.com/SenSE-Lab-OSU/YAMS\n")
-            uuid_path = os.path.join(in_dir, "uuid.txt")
+            file.write(f"Legacy sampling rate = {options.legacy_fs} (no effect; see doc/data_extraction.md)\n")
+            file.write(f"Save format = {options.save_format}\n")
+            file.write(f"Ignore subject/session ID parsing = {options.ignore_id_parsing}\n")
+            for sensor in SENSOR_ORDER:
+                file.write(f"{sensor.upper()} record format = {options.format_for(sensor)} (requested)\n")
+            file.write(f"Cross-check against uuid.txt = {options.validate_with_uuid}"
+                       f" (on conflict: {options.on_format_conflict})\n")
+            file.write(f"Strict record validation = {options.strict_ppg}\n")
+            file.write(f"Detection threshold = {options.sniff_threshold}\n")
+            file.write("I m-sense with YAMS at https://github.com/SenSE-Lab-OSU/YAMS\n")
+            uuid_path = os.path.join(self.in_dir, "uuid.txt")
             if os.path.exists(uuid_path):
                 file.write("\n--- Device info (uuid.txt) ---\n")
                 with open(uuid_path, "r") as uuid_file:
                     file.write(uuid_file.read())
-
-        self.ppg_labels = ["ir1", "ir2", "g1", "g2",  "Timestamp", "Counter"]
-        self.ppg_formats = ["<i", "<i", "<i", "<i", "<i", "<i"]
-
-        self.acc_labels = ["AccX", "AccY", "AccZ", "QuatX", "QuatY", "QuatZ", "ENMO", "Timestamp", "Counter"]
-        self.acc_formats = ["<h", "<h", "<h", "<f", "<f", "<f", "<f", "<i", "<i"]
-
-        self.ecg_labels = ["ECG", "ETAG", "PTAG", "Counter"]
-
-    @property
-    def ppg_512hz_tick(self):
-        """True when the PPG Counter is the 512 Hz global tick (step 2), not the legacy 320 Hz one."""
-        return self.ppg_format in ("v2", "packed16")
 
     def get_encoding_alias(self):
         alias_dict = {}
@@ -624,59 +219,74 @@ class DataExtractor():
         return alias_dict
 
     def run(self):
+        if self.options.dry_run:
+            return self.dry_run()
+
         ids = self.obtain_predix_ids()
         for id in ids:
-            search_prefix = id + "ac"
-            file_name = search_prefix + (".pkl" if self.save_format == "pickle" else ".csv")
-            self.extract_csv(search_prefix, file_name, self.acc_labels, self.acc_formats, id=id)
+            for sensor in SENSOR_ORDER:
+                search_prefix = id + sensor
+                file_name = search_prefix + (".pkl" if self.save_format == "pickle" else ".csv")
+                self.extract_csv(search_prefix, file_name, id=id)
 
-            search_prefix = id + "ppg"
-            file_name = search_prefix + (".pkl" if self.save_format == "pickle" else ".csv")
-            self.extract_csv(search_prefix, file_name, self.ppg_labels, self.ppg_formats, id=id)
+        self.write_provenance()
 
-            search_prefix = id + "ecg"
-            file_name = search_prefix + (".pkl" if self.save_format == "pickle" else ".csv")
-            self.extract_csv(search_prefix, file_name, self.ecg_labels, formats=None, id=id)
+    def dry_run(self):
+        """Resolve every binary and report, without decoding or writing anything."""
+        for file in sorted(os.listdir(self.in_dir)):
+            if not file.endswith(".bin"):
+                continue
+            sensor = sensor_of(file)
+            if sensor is not None:
+                self.resolve(os.path.join(self.in_dir, file), sensor)
 
-        self.write_ppg_provenance()
+        print("\n" + Resolution.header())
+        for res in self.resolutions:
+            print(res.row())
+        print(f"\n(dry run — {len(self.resolutions)} file(s) inspected, nothing written)")
+        return self.resolutions
 
-    def write_ppg_provenance(self):
-        """Append the resolved PPG layout to README.txt.
+    def write_provenance(self):
+        """Append the per-file format resolution to README.txt.
 
-        With no version number in uuid.txt to identify these files later, this is
-        the only record of how the CSVs were decoded.
+        packed16 carries no version number, so for those files this table is the
+        only record of how a CSV was decoded.
         """
-        if self.ppg_files_read == 0:
+        if not self.resolutions:
             return
         with open(os.path.join(self.out_dir, "README.txt"), "a") as file:
-            file.write("\n--- PPG decode ---\n")
-            file.write(f"Resolved PPG record format = {self.ppg_format}\n")
-            file.write(f"PPG files read = {self.ppg_files_read}\n")
-            file.write(f"Malformed PPG records dropped = {self.ppg_malformed}\n")
+            file.write("\n--- Format resolution ---\n")
+            file.write(Resolution.header() + "\n")
+            for res in self.resolutions:
+                file.write(res.row() + "\n")
+            file.write(f"\nMalformed records dropped = {self.malformed}\n")
+            conflicts = [r for r in self.resolutions if r.agrees is False]
+            if conflicts:
+                file.write(f"uuid.txt conflicts = {len(conflicts)} "
+                           f"(content used unless on_format_conflict=trust_uuid)\n")
 
-    def read_ppg(self, full_path):
-        if not self._ppg_format_resolved:
-            guess = sniff_ppg_format(full_path)
-            self._ppg_format_resolved = True
-            if guess is None:
-                print(f"PPG sniff inconclusive; falling back to {self.ppg_format}")
-            else:
-                print(f"sniffed PPG format: {guess}")
-                self.ppg_format = guess
+    def resolve(self, full_path, sensor):
+        res = detect.resolve(
+            full_path, sensor, self.options.format_for(sensor), self.device_version,
+            force_new_format=self.options.force_new_format,
+            validate_with_uuid=self.options.validate_with_uuid,
+            on_conflict=self.options.on_format_conflict,
+            threshold=self.options.sniff_threshold,
+        )
+        self.resolutions.append(res)
+        return res
 
-        self.ppg_files_read += 1
-        if self.ppg_format == "packed16":
-            df, dt = read_ppg_bin_packed16(full_path, strict=self.strict_ppg)
-            self.ppg_malformed += df.attrs.get('malformed_records', 0)
-            return df, dt
-        if self.ppg_format == "v2":
-            return read_ppg_bin_v2(full_path)
-        return read_ppg_bin(full_path)
+    def read_file(self, full_path, sensor):
+        res = self.resolve(full_path, sensor)
+        df, dt = formats.read_bin(full_path, res.spec, strict=self.strict)
+        self.malformed += df.attrs.get('malformed_records', 0)
+        return df, res
 
-    def extract_csv(self, search_prefix, file_name, labels, formats, id=-1):
-        self.generate_csv_for_pattern(self.in_dir, file_name, search_prefix, labels, formats, out_dir=self.out_dir, id=id)
+    def extract_csv(self, search_prefix, file_name, id=-1):
+        self.generate_csv_for_pattern(self.in_dir, file_name, search_prefix,
+                                      out_dir=self.out_dir, id=id)
 
-    def generate_csv_for_pattern(self, in_dir, type_prefix: str, search_key: str, labels, formats, out_dir="./", id=-1):
+    def generate_csv_for_pattern(self, in_dir, type_prefix: str, search_key: str, out_dir="./", id=-1):
         # 1. Ignore ID Parsing Handling
         if self.ignore_id_parsing:
             file_name = type_prefix # Defaults to id + "ac.csv" or ".pkl"
@@ -691,15 +301,13 @@ class DataExtractor():
                 alias = f"sub-{sub_id}_ses-{ses_id}_{self.note}_"
                 file_name = f"{type_prefix}".replace(id, alias)
 
-        print(type_prefix, search_key, labels, formats, '********')
-        data_set = self.collect_all_data_by_prefix(in_dir, search_key, labels, formats)
-        
+        print(type_prefix, search_key, '********')
+        data_set, spec = self.collect_all_data_by_prefix(in_dir, search_key)
+
         if data_set is not None:
             os.makedirs(out_dir, exist_ok=True)
-            # PPG counter semantics follow the PPG layout, which may differ from
-            # the version-derived format used by the IMU/ECG paths.
-            new_format_counter = self.ppg_512hz_tick if 'ppg' in search_key else self.use_new_format
-            counter_validity_check(data_set, use_new_format=new_format_counter)
+            # Counter semantics come from the layout that was actually decoded.
+            counter_validity_check(data_set, spec)
 
             try:
                 dt = [datetime.fromtimestamp(int(t), UTC).strftime("%Y/%m/%d %H:%M:%S") for t in data_set['CDCT']]
@@ -720,24 +328,25 @@ class DataExtractor():
             else:
                 data_set.to_csv(out_path, index=False)
 
-    def collect_all_data_by_prefix(self, path, prefix: str, labels: list[str], types: list[str]):
-        files = gather_files_by_prefix(prefix, path)  
-        if len(files) == 0: return None
-        
-        all_df = []
-        for file in files:
-            full_path = os.path.join(path, file)
-            if 'ppg' in file:
-                df, dt = self.read_ppg(full_path)
-            elif 'ecg' in file:
-                df, dt = read_ecg_bin(full_path)
-            elif 'ac' in file:
-                df, dt = read_ac_bin_v2(full_path) if self.use_new_format else read_ac_bin(full_path)
-            else:
-                continue
-            all_df.append(df)
+    def collect_all_data_by_prefix(self, path, prefix: str):
+        """Concatenate every binary matching `prefix`. Returns (df, spec) or (None, None)."""
+        files = gather_files_by_prefix(prefix, path)
+        if len(files) == 0:
+            return None, None
 
-        return pd.concat(all_df)
+        all_df, spec = [], None
+        for file in files:
+            sensor = sensor_of(file)
+            if sensor is None:
+                continue
+            df, res = self.read_file(os.path.join(path, file), sensor)
+            all_df.append(df)
+            spec = res.spec
+
+        if not all_df:
+            return None, None
+        return pd.concat(all_df), spec
+
 
     def obtain_predix_ids(self):
         all_files = [""]
@@ -767,21 +376,26 @@ def gather_files_by_prefix(prefix: str, path):
     all_files.sort(key=file_sort)
     return all_files
 
-def counter_validity_check(df: pd.DataFrame, use_new_format=False):
+def counter_validity_check(df: pd.DataFrame, spec=None):
+    """Report how many counter deltas depart from the layout's expected step.
+
+    The expected step comes from the spec that was actually decoded, so this no
+    longer has to guess it from the data or branch on a version flag.
+    """
+    if spec is None:
+        print("pass counter check: N/A (no format resolved)")
+        return
     # The readers append CDCT/init_CDCT, so the last column is not the counter.
     counter_columns = df[['Counter']] if 'Counter' in df.columns else df.iloc[:, -1:]
     counter_arr = numpy.array(counter_columns).flatten()
     diff_arr = numpy.diff(counter_arr)
-    if use_new_format:
-        positive_diffs = diff_arr[diff_arr > 0]
-        if len(positive_diffs) == 0:
-            print("pass counter check: N/A (no positive diffs)")
-            return
-        expected_step = int(numpy.median(positive_diffs))
-        check_array = (diff_arr == expected_step) | (diff_arr == expected_step * 2) | (diff_arr > 2**31)
-    else:
-        check_array = (diff_arr == 5) | (diff_arr == 10) | (diff_arr < -65000)
-    print("pass counter check: " + str(numpy.all(check_array)))
+    step = spec.tick_step
+    # step: nominal. 2*step: one dropped sample. |d| near the modulus: rollover,
+    # in either sign depending on whether the column survived as signed.
+    check_array = ((diff_arr == step) | (diff_arr == step * 2)
+                   | (numpy.abs(diff_arr) > spec.wrap * 0.9))
+    print(f"pass counter check: {numpy.all(check_array)} "
+          f"({spec.sensor}/{spec.name}, expected step {step})")
     print("and number of non matching samples: " + str(numpy.count_nonzero(check_array == 0)))
 
 def unit_conversion_ac(data_set):
@@ -794,15 +408,15 @@ def get_t0(file_list):
     t = sorted([int(match.group(1)) for filename in file_list if (match := re.search(pattern, filename))])
     return t[0]
 
-def get_cdct(df, bin_list, fs=320):
+def get_cdct(df, bin_list, fs=320, counter_bits=16):
     t0 = get_t0(bin_list)
-    counter_diff = np.diff(df['Counter']) % (2^16 - 1)
+    counter_diff = np.diff(df['Counter']) % (2 ** counter_bits)
     counter_diff = np.insert(counter_diff, 0, 0)
     df['CDCT'] = t0 + np.cumsum(counter_diff) / fs
     return df
 
-def main(in_dir, out_dir, legacy_fs=False, df=None, note="", gradio=True, save_format="csv", ignore_id_parsing=False, force_new_format=False, ppg_format="auto", strict_ppg=False):
-    extractor = DataExtractor(in_dir, out_dir, legacy_fs=legacy_fs, df=df, note=note, save_format=save_format, ignore_id_parsing=ignore_id_parsing, force_new_format=force_new_format, ppg_format=ppg_format, strict_ppg=strict_ppg)
+def main(in_dir, out_dir, df=None, note="", gradio=True, options=None):
+    extractor = DataExtractor(in_dir, out_dir, df=df, note=note, options=options)
     extractor.run()
     if df is not None: print(df.head())
     if gradio: gr.Info("✅ Extraction completed")
@@ -819,18 +433,34 @@ if __name__ == '__main__':
     parser.add_argument('--save_format', type=str, choices=['csv', 'pickle'], default='csv', help="Format to save extracted data (csv or pickle)")
     parser.add_argument('--ignore_id', action='store_true', default=False, help="Ignore subject and session ID parsing for file names")
     parser.add_argument('--mode', type=str, choices=['dir', 'batch'], default='dir', help="Run mode: 'dir' for single directory of bins, 'batch' for folder of zips")
-    parser.add_argument('--force_new_format', action='store_true', default=False, help="Force v4.7.0+ extraction format regardless of uuid.txt version")
+    parser.add_argument('--force_new_format', action='store_true', default=False,
+                        help="Assume v4.7.0+ when the format has to be guessed from the device "
+                             "version (i.e. in 'version' mode, or when detection is inconclusive). "
+                             "Does not override content detection.")
 
-    # 4. PPG record layout (independent of the version-derived format above)
+    # 4. Record layout, per sensor. 'auto' detects from file contents.
     parser.add_argument('--ppg_format', type=str, choices=PPG_FORMAT_CHOICES, default='auto',
-                        help="PPG record layout: 'auto' follows uuid.txt, 'packed16' is the 16-byte "
-                             "packed format (no version tie), 'sniff' detects it from file contents")
+                        help="PPG record layout: 'auto' detects from content (default), "
+                             "'version' follows uuid.txt, or name a layout explicitly")
+    parser.add_argument('--ac_format', type=str, choices=AC_FORMAT_CHOICES, default='auto',
+                        help="IMU record layout: 'auto' detects from content (default)")
+    parser.add_argument('--ecg_format', type=str, choices=ECG_FORMAT_CHOICES, default='auto',
+                        help="ECG record layout: 'auto' detects from content (default)")
+    parser.add_argument('--validate_with_uuid', action='store_true', default=False,
+                        help="Cross-check the detected layout against uuid.txt and report disagreements")
+    parser.add_argument('--on_format_conflict', type=str, choices=CONFLICT_CHOICES, default='warn',
+                        help="What to do when content and uuid.txt disagree (default: warn, content wins)")
+    parser.add_argument('--sniff_threshold', type=float, default=0.90,
+                        help="Minimum detection score to accept a layout (default: 0.90)")
+    parser.add_argument('--dry_run', action='store_true', default=False,
+                        help="Report the resolved layout for every binary and exit without writing")
     parser.add_argument('--strict_ppg', action='store_true', default=False,
-                        help="Raise on malformed PPG records instead of dropping and reporting them")
+                        help="Raise on records that fail validation instead of dropping and reporting them")
 
     args = parser.parse_args()
+    options = ExtractionOptions.from_args(args)
 
     if args.mode == 'batch':
-        batch_extract_zips(args.in_dir, save_format=args.save_format, ignore_id_parsing=args.ignore_id, ppg_format=args.ppg_format, strict_ppg=args.strict_ppg)
+        batch_extract_zips(args.in_dir, options=options)
     else:
-        main(args.in_dir, args.out_dir, legacy_fs=args.legacy_fs, gradio=False, save_format=args.save_format, ignore_id_parsing=args.ignore_id, force_new_format=args.force_new_format, ppg_format=args.ppg_format, strict_ppg=args.strict_ppg)
+        main(args.in_dir, args.out_dir, gradio=False, options=options)

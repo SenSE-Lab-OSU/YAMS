@@ -6,7 +6,7 @@ from yams.data_explorer import DataExplorer
 from yams.data_extraction import data_extraction_interface, data_extraction_pro_interface
 from yams.msense_collector import MsenseController, session_manager_interface
 from yams.msense_yams_sync import sync_interface
-from yams.config import __version__
+from yams.config import __version__, favicon_path
 
 def main():
     with gr.Blocks(title="YAMS") as demo:
@@ -42,7 +42,7 @@ def main():
         )
 
     demo.queue()
-    demo.launch(inbrowser=True)
+    demo.launch(inbrowser=True, favicon_path=favicon_path())
     
 
 if __name__ == '__main__':

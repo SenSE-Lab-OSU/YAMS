@@ -12,6 +12,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from yams.data_extraction import extract_zip
+from yams.extraction_options import ExtractionOptionsPanel
 
 
 def _copy_drive(dev_name, file_list, dst_dir):
@@ -39,9 +40,13 @@ class FileDownloader():
         with gr.Row():
             enc_table = gr.CheckboxGroup(label="Available session", scale=3)
             auto_extract = gr.Checkbox(True, label="Extract data after download")
-            force_new_format = gr.Checkbox(False, label="Force v4.7.0+ format")
 
-        file_explorer_btn.click(self.get_available_files, 
+        # Same panel as both Data extractor tabs; only meaningful while the
+        # download actually extracts, so it follows that checkbox.
+        opts = ExtractionOptionsPanel()
+        opts.gate_on(auto_extract)
+
+        file_explorer_btn.click(self.get_available_files,
                                 inputs=[msense_path, msense_group],
                                 outputs=enc_table)
 
@@ -56,7 +61,9 @@ class FileDownloader():
 
         download_btn = default_refresh_btn()
 
-        download_btn2.click(self.download_selected_files, inputs=[enc_table, auto_extract, force_new_format], outputs=[info_panel, download_btn])
+        download_btn2.click(opts.bind(self.download_selected_files),
+                            inputs=[enc_table, auto_extract] + opts.inputs,
+                            outputs=[info_panel, download_btn])
 
         extract_btn.click(prompt_device_name, outputs=[label, confirm_btn, extract_btn])
 
@@ -66,7 +73,7 @@ class FileDownloader():
                                                         extract_btn,
                                                         confirm_btn])
         
-    def download_selected_files(self, enc_list, auto_extract=False, force_new_format=False):
+    def download_selected_files(self, enc_list, auto_extract=False, options=None):
         # Build per-drive file lists; include drive index in fallback name to avoid key
         # collisions when multiple drives lack a uuid.txt (same timestamp → same key).
         mac_pattern = r'(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}'
@@ -139,7 +146,7 @@ class FileDownloader():
 
             if auto_extract:
                 progress(0, desc="Extracting data. Please wait...")
-                return status, extract_zip(zip_filename, force_new_format=force_new_format)
+                return status, extract_zip(zip_filename, options=options)
             else:
                 return status, gr.DownloadButton(label="🎉Download data", value=zip_filename, interactive=True)
 
