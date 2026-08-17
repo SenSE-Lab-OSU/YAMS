@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YAMS — Yet Another MotionSenSE Service utility</title>
+<meta name="description" content="A desktop app for the MotionSenSE wristband: run collections, pull data off the device, and extract raw sensor binaries to CSV.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="stylesheet" href="assets/style.css">
+
+<script>
+// Applied before first paint so a stored choice never flashes the other theme.
+// No stored value means "follow the system", and no attribute is set at all.
+(function () {
+  try {
+    var t = localStorage.getItem('yams-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  } catch (e) { /* storage blocked; fall back to the system preference */ }
+})();
+</script>
+
+<meta property="og:title" content="YAMS — Yet Another MotionSenSE Service utility">
+<meta property="og:description" content="Run collections, pull data off the MotionSenSE wristband, and extract raw sensor binaries to CSV.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="assets/yams_logo.png">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <img src="assets/yams_logo.png" alt="" width="26" height="26">
+      YAMS
+    </a>
+    <div class="header-right">
+      <nav class="nav" aria-label="Sections">
+        <a class="opt-sm" href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a class="opt-sm" href="#usage">Usage</a>
+        <a class="opt" href="#extraction">Extraction</a>
+        <a href="https://github.com/SenSE-Lab-OSU/YAMS">GitHub</a>
+      </nav>
+      <button class="theme-toggle" type="button" id="theme-toggle"
+              aria-label="Switch to dark theme" title="Switch to dark theme">
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 1.8v2.4M12 19.8v2.4M4.0 4.0l1.7 1.7M18.3 18.3l1.7 1.7M1.8 12h2.4M19.8 12h2.4M4.0 20l1.7-1.7M18.3 5.7L20 4.0"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ---------------------------------------------------------------- hero -->
+<div class="hero" id="top">
+  <div class="wrap">
+    <img class="mark" src="assets/yams_logo.png" alt="YAMS logo" width="168" height="168">
+    <h1>YAMS</h1>
+    <p class="tagline">
+      Yet Another MotionSenSE Service utility — run collections on the wristband,
+      pull data off it, and turn raw sensor binaries into CSV.
+    </p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/SenSE-Lab-OSU/YAMS/releases/latest">Download the app</a>
+      <a class="btn ghost" href="#install">Install with pip</a>
+    </div>
+    <p class="meta">
+      <span>Windows &amp; macOS</span><span>Python 3.12+</span><span>MIT licensed</span>
+    </p>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------ features -->
+<section id="features">
+  <div class="wrap">
+    <span class="eyebrow">What it does</span>
+    <h2>One app for the whole capture workflow</h2>
+    <p class="lede">
+      YAMS opens in your browser as a set of tabs. Each one covers a stage of
+      working with the MotionSenSE wristband, from starting a collection to
+      getting analysis-ready CSVs.
+    </p>
+
+    <div class="grid cols-3">
+      <div class="card">
+        <span class="tab-name">⌚️ MotionSenSE controller</span>
+        <h3>Run a collection</h3>
+        <p>Connect to wristbands, start and stop recording, and watch collection state live.</p>
+      </div>
+      <div class="card">
+        <span class="tab-name">📂 File downloader</span>
+        <h3>Pull data off the device</h3>
+        <p>Browse onboard sessions and download them, optionally extracting to CSV in the same step.</p>
+      </div>
+      <div class="card">
+        <span class="tab-name">🛠️ Data extractor</span>
+        <h3>Binaries to CSV</h3>
+        <p>Point it at a folder of <code>.bin</code> files and get one CSV per sensor per subject.</p>
+      </div>
+      <div class="card">
+        <span class="tab-name">🛠️ Data extractor pro</span>
+        <h3>Zip in, zip out</h3>
+        <p>Drop in a zip of device folders and get an extracted archive back, without unpacking by hand.</p>
+      </div>
+      <div class="card">
+        <span class="tab-name">📊 Data viewer</span>
+        <h3>Check it before you trust it</h3>
+        <p>Plot extracted signals to confirm a capture looks right before it reaches your analysis.</p>
+      </div>
+      <div class="card">
+        <span class="tab-name">⏱️ Clock Sync</span>
+        <h3>Align the clocks</h3>
+        <p>Reconcile device time against reference timestamps so streams line up across devices.</p>
+      </div>
+      <div class="card">
+        <span class="tab-name">📋 UUID extractor</span>
+        <h3>Read device identity</h3>
+        <p>Pull serial numbers, firmware versions and identifiers out of connected wristbands.</p>
+      </div>
+      <div class="card">
+        <span class="tab-name">📒 Extensions</span>
+        <h3>Devices &amp; sessions</h3>
+        <p>Manage the device registry and the subject/session encoding table used to name outputs.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------- install -->
+<section id="install">
+  <div class="wrap">
+    <span class="eyebrow">Install</span>
+    <h2>Three ways to get it</h2>
+    <p class="lede">
+      If you just want to use YAMS, take the first one — it needs no Python at all.
+    </p>
+
+    <div class="grid cols-3">
+
+      <div class="card">
+        <h3>Prebuilt app</h3>
+        <p style="margin-bottom:.9rem">A single executable. No Python, no dependencies — download and run.</p>
+        <p style="margin-bottom:.9rem">
+          <code>YAMS_Windows_x64.exe</code> for Windows, <code>YAMS_MacOS_arm64</code> for
+          Apple&nbsp;silicon Macs. Intel Macs are not covered by the prebuilt
+          build — use pip or source instead.
+        </p>
+        <p style="margin:0"><a href="https://github.com/SenSE-Lab-OSU/YAMS/releases/latest">Download the latest release&nbsp;→</a></p>
+      </div>
+
+      <div class="card">
+        <h3>From PyPI</h3>
+        <p style="margin-bottom:.9rem">If you already work in Python.</p>
+        <div class="code"><button class="copy" type="button">Copy</button><pre>pip install -U yams-util
+python -m yams</pre></div>
+      </div>
+
+      <div class="card">
+        <h3>From source</h3>
+        <p style="margin-bottom:.9rem">For development, or to run unreleased changes.</p>
+        <div class="code"><button class="copy" type="button">Copy</button><pre>git clone https://github.com/SenSE-Lab-OSU/YAMS.git
+cd YAMS
+pip install -r requirements.txt
+conda install -c conda-forge liblsl
+python -m yams</pre></div>
+      </div>
+
+    </div>
+
+    <div class="note" style="margin-top:1.5rem">
+      <strong>Don't skip <code>liblsl</code>.</strong>
+      The Lab Streaming Layer library is a native dependency that pip cannot supply.
+      Installing it from conda-forge is the step most source installs miss, and without
+      it the app fails at startup.
+    </div>
+
+    <p style="margin:0">
+      However you install it, YAMS starts a local server and opens your browser at
+      <code>http://127.0.0.1:7860</code>. Nothing leaves your machine.
+    </p>
+  </div>
+</section>
+
+<!-- --------------------------------------------------------------- usage -->
+<section id="usage">
+  <div class="wrap">
+    <span class="eyebrow">Usage</span>
+    <h2>From wristband to CSV</h2>
+    <p class="lede">The normal arc of a study session, in four steps.</p>
+
+    <ol class="steps">
+      <li>
+        <h3>Collect</h3>
+        <p>
+          In <strong>⌚️ MotionSenSE controller</strong>, connect the wristbands and start
+          the collection. Data is written to onboard flash, so the devices do not need to
+          stay in range once recording has begun.
+        </p>
+      </li>
+      <li>
+        <h3>Download</h3>
+        <p>
+          In <strong>📂 File downloader</strong>, pick the sessions you want and pull them
+          off the device. Tick <em>Extract data after download</em> to get CSVs in the same
+          pass. See
+          <a href="https://github.com/SenSE-Lab-OSU/YAMS/blob/main/doc/file_download.md">Extract onboard data</a>
+          for the full walkthrough.
+        </p>
+      </li>
+      <li>
+        <h3>Extract</h3>
+        <p>
+          Or extract separately in <strong>🛠️ Data extractor</strong>: give it an input
+          folder of <code>.bin</code> files and an output folder. Record formats are detected
+          automatically, so there is normally nothing to configure.
+        </p>
+      </li>
+      <li>
+        <h3>Verify</h3>
+        <p>
+          Open the result in <strong>📊 Data viewer</strong>, and read <code>README.txt</code>
+          in the output folder — it records how every single file was decoded.
+        </p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------- extraction -->
+<section id="extraction">
+  <div class="wrap">
+    <span class="eyebrow">Data extraction</span>
+    <h2>Formats are detected, not assumed</h2>
+    <p class="lede">
+      The wristband has written six different on-disk record layouts over its life, and the
+      firmware version recorded on the device is not always right about which one you have.
+      YAMS reads the layout out of the file itself.
+    </p>
+
+    <div class="note">
+      <strong>New in 1.6.</strong>
+      PPG, IMU and ECG layouts are each detected from file contents, per file. Captures
+      whose <code>uuid.txt</code> is stale or missing entirely now extract correctly with
+      no flags at all — previously they produced silently wrong numbers.
+    </div>
+
+    <p>Run it from the command line:</p>
+
+    <div class="code"><button class="copy" type="button">Copy</button><pre>python -m yams.data_extraction -i path/to/binaries -o path/to/output</pre></div>
+
+    <p>Or inspect what would happen first, without writing anything:</p>
+
+    <div class="code"><button class="copy" type="button">Copy</button><pre>python -m yams.data_extraction -i path/to/binaries --dry_run</pre></div>
+
+    <p style="margin-top:2rem">The options you are most likely to need:</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Flag</th><th>Default</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>--dry_run</code></td><td>off</td><td>Report the layout resolved for every binary and exit</td></tr>
+          <tr><td><code>--validate_with_uuid</code></td><td>off</td><td>Cross-check detection against <code>uuid.txt</code> and report disagreements</td></tr>
+          <tr><td><code>--ppg_format</code></td><td><code>auto</code></td><td>Force a PPG layout, or <code>version</code> for the pre-1.6 behaviour</td></tr>
+          <tr><td><code>--save_format</code></td><td><code>csv</code></td><td><code>csv</code> or <code>pickle</code></td></tr>
+          <tr><td><code>--mode</code></td><td><code>dir</code></td><td><code>dir</code> for a folder of binaries, <code>batch</code> for a folder of zips</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:1.5rem">
+      Every flag, all six record layouts, how detection works and how it is measured:
+      <a href="https://github.com/SenSE-Lab-OSU/YAMS/blob/main/doc/data_extraction.md">Data Extraction reference&nbsp;→</a>
+    </p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="links">
+      <a href="https://github.com/SenSE-Lab-OSU/YAMS">GitHub</a>
+      <a href="https://github.com/SenSE-Lab-OSU/YAMS/releases">Releases</a>
+      <a href="https://pypi.org/project/yams-util/">PyPI</a>
+      <a href="https://huggingface.co/spaces/Oink8154/YAMS">Demo (UI only)</a>
+      <a href="https://github.com/SenSE-Lab-OSU/YAMS/blob/main/doc/data_extraction.md">Docs</a>
+      <a href="https://github.com/SenSE-Lab-OSU/YAMS/issues">Report an issue</a>
+    </div>
+    <p style="margin:0">
+      Built by the <a href="https://github.com/SenSE-Lab-OSU">SenSE Lab</a> at The Ohio State University.
+      Released under the MIT license.
+    </p>
+  </div>
+</footer>
+
+<script>
+// Theme toggle. Starts on the system preference; the first click pins a choice
+// and stores it. matchMedia is only consulted while nothing is pinned, so the
+// button keeps working if the reader changes their OS theme mid-visit.
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('theme-toggle');
+  var media = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function current() {
+    return root.dataset.theme || (media.matches ? 'dark' : 'light');
+  }
+  function label() {
+    var next = current() === 'dark' ? 'light' : 'dark';
+    var text = 'Switch to ' + next + ' theme';
+    btn.setAttribute('aria-label', text);
+    btn.setAttribute('title', text);
+  }
+  btn.addEventListener('click', function () {
+    var next = current() === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('yams-theme', next); } catch (e) { /* not fatal */ }
+    label();
+  });
+  media.addEventListener('change', function () { if (!root.dataset.theme) label(); });
+  label();
+})();
+
+// Copy buttons. No dependencies; degrades to a visible-but-inert button if the
+// Clipboard API is unavailable (non-secure origins).
+document.querySelectorAll('.code .copy').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var text = btn.parentElement.querySelector('pre').innerText;
+    if (!navigator.clipboard) { btn.textContent = 'Select & copy'; return; }
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'Copied';
+      btn.dataset.done = '1';
+      setTimeout(function () { btn.textContent = 'Copy'; delete btn.dataset.done; }, 1600);
+    }).catch(function () {
+      btn.textContent = 'Select & copy';   // e.g. opened over file://
+    });
+  });
+});
+</script>
+
+</body>
+</html>
