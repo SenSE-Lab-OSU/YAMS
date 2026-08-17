@@ -8,6 +8,9 @@ datas += collect_data_files('gradio')
 datas += collect_data_files('safehttpx')
 datas += collect_data_files('groovy')
 datas += collect_data_files('scipy')
+# App artwork: the favicon is read at runtime via yams.config.favicon_path(),
+# so it has to exist inside the bundle, not just next to the source tree.
+datas += [('yams/resources/icons', 'yams/resources/icons')]
 
 a = Analysis(
     ['app.py'],
