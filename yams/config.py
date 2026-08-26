@@ -1,7 +1,7 @@
 import os
 import sys
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 
 def resource_path(*parts):

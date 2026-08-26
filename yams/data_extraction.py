@@ -137,7 +137,7 @@ def data_extraction_interface():
     note = gr.Text("", label="Note")
 
     # Extraction is what this tab is for, so the panel starts open here.
-    opts = ExtractionOptionsPanel(open=True)
+    opts = ExtractionOptionsPanel(open=False)
 
     btn = gr.Button("Extract raw data")
 
@@ -319,7 +319,7 @@ class DataExtractor():
 
             if 'ac' in search_key:
                 print("perform unit conversion for IMU")
-                data_set = unit_conversion_ac(data_set)
+                data_set = unit_conversion_ac(data_set, spec)
 
             # 2. Save Format Handling
             out_path = os.path.join(out_dir, file_name)
@@ -329,23 +329,48 @@ class DataExtractor():
                 data_set.to_csv(out_path, index=False)
 
     def collect_all_data_by_prefix(self, path, prefix: str):
-        """Concatenate every binary matching `prefix`. Returns (df, spec) or (None, None)."""
+        """Concatenate every binary matching `prefix`. Returns (df, spec) or (None, None).
+
+        Chunks of one session (v3 chunked naming) share a single filename-derived
+        t0, but for the flat per-record formats `read_bin` computes CDCT as a
+        cumsum starting at 0 per file — concatenating chunks as-is would restart
+        the clock at every chunk boundary. Group by t0 (== by session; a
+        non-chunked file is its own one-chunk "session") and, for any session
+        spanning more than one chunk, restitch CDCT as one continuous clock
+        anchored at that session's t0. Container formats (ac:v3) already anchor
+        every sample to a real, session-continuous RTC tick internally and are
+        left untouched — recomputing from Counter alone would only lose that
+        per-block recalibration, not fix anything.
+        """
         files = gather_files_by_prefix(prefix, path)
         if len(files) == 0:
             return None, None
 
-        all_df, spec = [], None
+        sessions, spec = {}, None    # t0 -> [df, ...], in chunk order
         for file in files:
             sensor = sensor_of(file)
             if sensor is None:
                 continue
-            df, res = self.read_file(os.path.join(path, file), sensor)
-            all_df.append(df)
+            full_path = os.path.join(path, file)
+            df, res = self.read_file(full_path, sensor)
             spec = res.spec
+            t0, _ = formats.get_CDCT_init(full_path)
+            sessions.setdefault(t0, []).append(df)
 
-        if not all_df:
+        if not sessions:
             return None, None
-        return pd.concat(all_df), spec
+
+        session_dfs = []
+        for t0, dfs in sessions.items():
+            if len(dfs) == 1:
+                session_dfs.append(dfs[0])
+            else:
+                combined = pd.concat(dfs, ignore_index=True)
+                if spec.read_file is None:     # flat per-record formats only
+                    combined = formats.recompute_cdct(combined, spec, t0)
+                session_dfs.append(combined)
+
+        return pd.concat(session_dfs), spec
 
 
     def obtain_predix_ids(self):
@@ -398,9 +423,16 @@ def counter_validity_check(df: pd.DataFrame, spec=None):
           f"({spec.sensor}/{spec.name}, expected step {step})")
     print("and number of non matching samples: " + str(numpy.count_nonzero(check_array == 0)))
 
-def unit_conversion_ac(data_set):
-    for c in ['AccX', 'AccY', 'AccZ']:
-        data_set[c] = data_set[c] /(2**16-1)*8
+def unit_conversion_ac(data_set, spec=None):
+    """Raw counts -> g. The v3 (ACF3) layout documents its own scale; legacy/v2
+    (the wristband) keep the original conversion so their output is unchanged.
+    """
+    if spec is not None and spec.key == "ac:v3":
+        for c in ['AccX', 'AccY', 'AccZ']:
+            data_set[c] = data_set[c] / formats.AC_V3_COUNTS_PER_G
+    else:
+        for c in ['AccX', 'AccY', 'AccZ']:
+            data_set[c] = data_set[c] /(2**16-1)*8
     return data_set
 
 def get_t0(file_list):

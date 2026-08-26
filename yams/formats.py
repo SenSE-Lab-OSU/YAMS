@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import os
 import re
+import struct
+import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Callable
@@ -32,6 +34,21 @@ PPG_PACKED_RESERVED_MASK = 0xFFF80000   # bits 19..31 must be clear in every cha
 
 # Firmware at or above this version writes the "v2" layouts.
 V2_VERSION = (4, 7, 0)
+
+# ACF3 accelerometer container — see data/.../ACCELEROMETER_BINARY_FORMAT.md
+AC_V3_MAGIC = b"ACF3"
+AC_V3_BLOCK_MAGIC = b"ACB1"
+AC_V3_TERMINAL_MAGIC = b"ACT2"
+AC_V3_FILE_SIZE = 4 * 1024 * 1024
+AC_V3_HEADER_SIZE = 4096
+AC_V3_TERMINAL_SIZE = 4096
+AC_V3_TERMINAL_OFFSET = AC_V3_FILE_SIZE - AC_V3_TERMINAL_SIZE
+AC_V3_REGION_SIZE = AC_V3_FILE_SIZE - AC_V3_HEADER_SIZE - AC_V3_TERMINAL_SIZE
+AC_V3_BLOCK_SIZE = 4096
+AC_V3_BLOCK_HEADER_SIZE = 16
+AC_V3_SAMPLE_SIZE = 6
+AC_V3_SAMPLES_PER_BLOCK = (AC_V3_BLOCK_SIZE - AC_V3_BLOCK_HEADER_SIZE) // AC_V3_SAMPLE_SIZE
+AC_V3_COUNTS_PER_G = 16384.0    # raw_count / 16384.0 = g, at the documented +/-2 g full scale
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +148,124 @@ def _decode_ecg(b):
     return cols, bad_sync | bad_type | bad_crc, info
 
 
+def _ac_v3_crc32_ok(buf, crc_field_off, crc_field_len, expected):
+    """CRC-32/ISO-HDLC (zlib's) over `buf` with the stored CRC field zeroed."""
+    patched = bytearray(buf)
+    patched[crc_field_off:crc_field_off + crc_field_len] = bytes(crc_field_len)
+    return (zlib.crc32(bytes(patched)) & 0xFFFFFFFF) == expected
+
+
+def _sniff_ac_v3(data: bytes) -> float:
+    """Content score for the ACF3 container: it is entirely self-identifying."""
+    return 1.0 if data[:4] == AC_V3_MAGIC else 0.0
+
+
+def _read_ac_v3(filepath, strict=False):
+    """Decode one ACF3 accelerometer chunk: 4 KiB header, ACB1 data blocks, ACT2 terminal.
+
+    Unlike the flat per-record layouts this is a real container: block count is
+    variable, the last block may be short, and per-sample timing is projected
+    from one RTC anchor per block rather than stored per sample. None of that
+    fits `whole_records`/`RecordSpec.decode`, so this owns the full file->df path.
+    """
+    basename = os.path.basename(filepath)
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    if len(data) != AC_V3_FILE_SIZE:
+        raise ValueError(f"{basename}: {len(data)} bytes, expected {AC_V3_FILE_SIZE} for an ACF3 chunk")
+
+    header = data[:AC_V3_HEADER_SIZE]
+    magic, fmt_version, sample_format = struct.unpack_from("<4sHH", header, 0)
+    if magic != AC_V3_MAGIC:
+        raise ValueError(f"{basename}: not an ACF3 file (magic {magic!r})")
+    if fmt_version != 3 or sample_format != 2:
+        raise ValueError(f"{basename}: unsupported ACF3 format_version={fmt_version} "
+                         f"sample_format={sample_format}")
+    odr_num, odr_den = struct.unpack_from("<II", header, 8)
+    header_crc, = struct.unpack_from("<I", header, 20)
+    anchor_hz, = struct.unpack_from("<I", header, 24)
+    if not _ac_v3_crc32_ok(header, 20, 4, header_crc):
+        msg = f"{basename}: ACF3 header CRC mismatch"
+        if strict:
+            raise ValueError(msg)
+        print(msg)
+
+    region = data[AC_V3_HEADER_SIZE:AC_V3_HEADER_SIZE + AC_V3_REGION_SIZE]
+    terminal = data[AC_V3_TERMINAL_OFFSET:AC_V3_TERMINAL_OFFSET + AC_V3_TERMINAL_SIZE]
+    tmagic, valid_len, tcrc = struct.unpack_from("<4sII", terminal, 0)
+
+    interrupted = tmagic != AC_V3_TERMINAL_MAGIC or not _ac_v3_crc32_ok(terminal, 8, 4, tcrc)
+    if interrupted:
+        valid_len = len(region)
+    elif valid_len > len(region):
+        msg = f"{basename}: terminal valid_data_length {valid_len} exceeds capacity {len(region)}"
+        if strict:
+            raise ValueError(msg)
+        print(msg + " — clamping")
+        valid_len = len(region)
+
+    x_parts, y_parts, z_parts, seq_parts, t_parts = [], [], [], [], []
+    off = 0
+    n_bad_blocks = 0
+    sample_period = odr_den / odr_num       # seconds per accelerometer sample
+    while off + AC_V3_BLOCK_HEADER_SIZE <= valid_len:
+        remaining = valid_len - off
+        block_len = AC_V3_BLOCK_SIZE if remaining >= AC_V3_BLOCK_SIZE else remaining
+        block = region[off:off + block_len]
+        bmagic, anchor_tick, first_seq, bcrc = struct.unpack_from("<4sIII", block, 0)
+        n_samples = (block_len - AC_V3_BLOCK_HEADER_SIZE) // AC_V3_SAMPLE_SIZE
+
+        ok = (bmagic == AC_V3_BLOCK_MAGIC and n_samples > 0
+              and _ac_v3_crc32_ok(block, 12, 4, bcrc))
+        if not ok:
+            n_bad_blocks += 1
+            # A short/garbled tail (interrupted collection, or a mid-file tear)
+            # cannot be trusted to resync cleanly: stop rather than guess.
+            if interrupted or block_len < AC_V3_BLOCK_SIZE:
+                break
+            off += AC_V3_BLOCK_SIZE
+            continue
+
+        raw = np.frombuffer(block, dtype="<u2", count=n_samples * 3,
+                            offset=AC_V3_BLOCK_HEADER_SIZE).reshape(-1, 3)
+        x_parts.append((raw[:, 0] & np.uint16(0xFFFE)).view(np.int16))
+        y_parts.append(raw[:, 1].view(np.int16))
+        z_parts.append(raw[:, 2].view(np.int16))
+        seq_parts.append(first_seq + np.arange(n_samples, dtype=np.uint32))
+        t_parts.append(anchor_tick / anchor_hz + np.arange(n_samples) * sample_period)
+
+        off += block_len
+
+    if not seq_parts:
+        raise ValueError(f"{basename}: no valid ACF3 data blocks decoded")
+
+    counter = np.concatenate(seq_parts)
+    df = pd.DataFrame({
+        "AccX": np.concatenate(x_parts),
+        "AccY": np.concatenate(y_parts),
+        "AccZ": np.concatenate(z_parts),
+        "Counter": counter,
+    })
+
+    t0, dt = get_CDCT_init(filepath)
+    df["CDCT"] = t0 + np.concatenate(t_parts)
+    df["init_CDCT"] = t0
+
+    n_bad_samples = n_bad_blocks * AC_V3_SAMPLES_PER_BLOCK
+    if n_bad_blocks:
+        msg = (f"AC {basename}: {n_bad_blocks} ACF3 block(s) failed validation "
+               f"(~{n_bad_samples} samples)" + (" — collection ended mid-block" if interrupted else ""))
+        if strict:
+            raise ValueError(msg)
+        print(msg + " — dropped")
+
+    df.attrs["malformed_records"] = n_bad_samples
+    df.attrs["trailing_bytes"] = 0
+    df.attrs["spec"] = "ac:v3"
+    return df, dt
+
+
 _PPG_LEGACY_DT = np.dtype([(n, "<i4") for n in
                            ("ir1", "ir2", "g1", "g2", "Timestamp", "Counter")])
 _PPG_V2_DT = np.dtype([(n, "<u4") for n in ("ir1", "ir2", "g1", "g2", "Counter")])
@@ -167,6 +302,10 @@ class RecordSpec:
     validated: bool = False     # has an independent integrity check beyond the tick
     since: tuple | None = None
     until: tuple | None = None
+    read_file: Callable | None = None   # container formats: (filepath, strict) -> (df, dt);
+                                         # bypasses whole_records/decode/the tick-diff CDCT math
+    sniff: Callable | None = None       # container formats: bytes -> score in [0, 1];
+                                         # bypasses the tick-diff content scorer in yams.detect
 
     @property
     def key(self):
@@ -207,9 +346,20 @@ REGISTRY = (
     RecordSpec("v2", "ac", 26, _dtype_decoder(_AC_V2_DT),
                tick_offset=22, tick_rate=512, tick_step=16, since=V2_VERSION),
 
+    # v3's per-record fields below are placeholders: read_file/sniff bypass every
+    # generic per-record code path (whole_records, decode, the tick-diff CDCT
+    # cumsum, and the tick-diff content scorer), so decode/tick_offset/tick_rate
+    # are never consulted. tick_step/tick_bits ARE used by the generic
+    # counter_validity_check on the 'Counter' column read_file produces, so they
+    # describe that column's real semantics (a modulo-2^32 sample sequence).
+    RecordSpec("v3", "ac", AC_V3_BLOCK_SIZE, lambda b: (_ for _ in ()).throw(
+                   NotImplementedError("ac:v3 is a container format; see read_file")),
+               tick_offset=0, tick_rate=1125 / 2, tick_step=1,
+               read_file=_read_ac_v3, sniff=_sniff_ac_v3),
+
     RecordSpec("framed", "ecg", 12, _decode_ecg,
                tick_offset=4, tick_rate=512, tick_step=1,
-               validated=True, since=V2_VERSION),
+               validated=True, since=V2_VERSION, trim_erased_tail=True),
 )
 
 SENSORS = ("ppg", "ac", "ecg")
@@ -244,11 +394,49 @@ def spec_for_version(sensor, version):
 # ---------------------------------------------------------------------------
 
 def get_CDCT_init(file_path):
-    """Reference timestamp encoded in the filename: <id><sensor><t0>.bin"""
+    """Reference timestamp encoded in the filename.
+
+    Legacy form `<id><sensor><t0>.bin`: t0 is already unix-seconds.
+
+    Chunked v3 form `<id><sensor><session_id>_<chunk>.bin` (see data/.../
+    ACCELEROMETER_BINARY_FORMAT.md, "Session filenames and chunking"):
+    `session_id = unix_time_seconds*1000 + (uptime_ms modulo 1000)` is
+    millisecond-scale, not a timestamp itself, and the `_<chunk>` suffix must
+    not be captured as t0 — either mistake reads out a nonsense date.
+    """
     filename = os.path.basename(file_path)
-    match = re.search(r'\d*[A-Za-z]+(\d+)\.bin$', filename)
-    t0 = int(match.group(1)) if match else 0
-    return t0, datetime.fromtimestamp(int(t0), UTC).strftime("%Y/%m/%d %H:%M:%S")
+    match = re.search(r'[A-Za-z]+(\d+)(_\d+)?\.bin$', filename)
+    if not match:
+        return 0, datetime.fromtimestamp(0, UTC).strftime("%Y/%m/%d %H:%M:%S")
+    value = int(match.group(1))
+    t0 = value // 1000 if match.group(2) else value
+    return t0, datetime.fromtimestamp(t0, UTC).strftime("%Y/%m/%d %H:%M:%S")
+
+
+def recompute_cdct(df, spec, t0):
+    """(Re)compute CDCT/init_CDCT from `df['Counter']` and a single anchor `t0`.
+
+    Used both for a single file (by `read_bin`) and for an already-concatenated
+    multi-chunk session (by `DataExtractor.collect_all_data_by_prefix`): every
+    chunk of one session shares the same filename-derived t0 (the chunk suffix
+    doesn't change it, see `get_CDCT_init`), but `Counter` keeps advancing
+    across chunk boundaries — so CDCT must be computed once per session, over
+    the full concatenated counter, not once per chunk. Computing it per chunk
+    instead restarts the clock at every chunk boundary, since every chunk
+    would otherwise reuse the same t0 as if it were the start of the recording.
+    Do not call this across a *session* boundary: the counter (RTC tick /
+    sample sequence) is documented as collection-local, not a device-wide
+    free-running clock, so two different sessions need their own t0 anchors.
+    """
+    counter = df['Counter'].to_numpy()
+    if not np.issubdtype(counter.dtype, np.floating):
+        counter = counter.astype(np.int64)
+    counter_diff = np.diff(counter) % spec.wrap
+    counter_diff = np.insert(counter_diff, 0, 0)
+    df = df.copy()
+    df['CDCT'] = t0 + np.cumsum(counter_diff) / spec.tick_rate
+    df['init_CDCT'] = t0
+    return df
 
 
 def whole_records(data, spec):
@@ -273,6 +461,9 @@ def read_bin(filepath, spec, strict=False):
 
     Malformed records are dropped and counted; `strict` raises instead.
     """
+    if spec.read_file is not None:
+        return spec.read_file(filepath, strict)
+
     with open(filepath, "rb") as f:
         data = f.read()
 
@@ -320,14 +511,7 @@ def read_bin(filepath, spec, strict=False):
             f"Is this file really in the {spec.sensor}/{spec.name} format?")
 
     t0, dt = get_CDCT_init(filepath)
-
-    counter = df['Counter'].to_numpy()
-    if not np.issubdtype(counter.dtype, np.floating):
-        counter = counter.astype(np.int64)
-    counter_diff = np.diff(counter) % spec.wrap
-    counter_diff = np.insert(counter_diff, 0, 0)
-    df['CDCT'] = t0 + np.cumsum(counter_diff) / spec.tick_rate
-    df['init_CDCT'] = t0
+    df = recompute_cdct(df, spec, t0)
 
     df.attrs['malformed_records'] = n_bad
     df.attrs['trailing_bytes'] = remainder

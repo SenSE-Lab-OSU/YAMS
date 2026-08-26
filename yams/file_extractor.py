@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from yams.data_extraction import extract_zip
 from yams.extraction_options import ExtractionOptionsPanel
+from yams.formats import get_CDCT_init
 
 
 def _copy_drive(dev_name, file_list, dst_dir):
@@ -179,14 +180,19 @@ class FileDownloader():
             for f in file_list:
                 f = os.path.basename(f)
                 if 'ac' in f or 'ecg' in f:
-                    match = re.match(r'(?:(\d+))?(?:ac|ecg)(\d+)\.bin$', f)
+                    # Only the participant/session encoding prefix is parsed here;
+                    # the timestamp comes from get_CDCT_init, which already handles
+                    # both the legacy `<id><sensor><t0>.bin` naming and the v3
+                    # chunked `<id><sensor><session_id>_<chunk>.bin` naming (a
+                    # regex requiring one digit run right up to `.bin`, as this
+                    # used to do inline, never matches the chunked form — every
+                    # v3 session silently failed to show up in this list).
+                    match = re.match(r'(\d*)(?:ac|ecg)', f)
                     if match:
-                        encoding = match.group(1)  # can be None
-                        timestamp = int(match.group(2))
+                        encoding = match.group(1) or None
 
-                        # Convert to local time
-                        dt = datetime.fromtimestamp(timestamp)
-                        timestamp = dt.strftime('%m/%d/%y')
+                        t0, _ = get_CDCT_init(f)
+                        timestamp = datetime.fromtimestamp(t0).strftime('%m/%d/%y') if t0 else '?'
 
                         # quick way to determine encoding technique
                         if encoding is None:
