@@ -36,7 +36,12 @@ def score_spec(data: bytes, spec: RecordSpec) -> float:
     The fraction of consecutive counter deltas equal to the layout's expected
     step, scaled — for layouts that carry one — by the fraction of records
     passing their own integrity check (packed16 reserved bits, ECG sync + CRC).
+    Container formats (`spec.sniff` set) skip all of that: they carry their own
+    magic bytes and are scored directly from those.
     """
+    if spec.sniff is not None:
+        return spec.sniff(data)
+
     n = len(data) // spec.size
     if n < MIN_RECORDS:
         return 0.0
