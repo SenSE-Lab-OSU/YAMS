@@ -6,4 +6,4 @@
 # For local development prefer an editable install of both repos:
 #     pip install -e ../PLASMA
 #     pip install -e .
-plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@packaging
+plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v1.0.0
