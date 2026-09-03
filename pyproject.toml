@@ -23,7 +23,7 @@ classifiers = [
 # During PLASMA/YAMS co-development, install PLASMA editable first and this line
 # resolves against it:  `pip install -e ../PLASMA && pip install -e .`
 dependencies = [
-    "plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@packaging",
+    "plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v1.0.0",
 ]
 
 [project.optional-dependencies]
