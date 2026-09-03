@@ -4,13 +4,33 @@ on:
   push:
     tags:
       - 'v*'
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # editable install pulls PLASMA (plasma-app[msense] @ git+...) from pyproject.toml;
+      # the manylinux pylsl wheel bundles liblsl, so no extra system dep here
+      - name: Install
+        run: pip install -e ".[test]"
+
+      - name: Run tests
+        run: pytest
+
   build-macos:
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -24,11 +44,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -c conda-forge liblsl -y
-          pip install -e ".[build,test]"
-
-      - name: Run tests
-        shell: bash -el {0}
-        run: pytest
+          pip install -e ".[build]"
 
       - name: Build
         shell: bash -el {0}
@@ -58,6 +74,8 @@ jobs:
           files: dist/YAMS_MacOS_arm64
 
   build-windows:
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,9 +86,6 @@ jobs:
 
       - name: Install dependencies
         run: pip install -e ".[build]"
-
-      - name: Run tests
-        run: pytest
 
       - name: Build
         run: pyinstaller app_windows.spec --noconfirm
