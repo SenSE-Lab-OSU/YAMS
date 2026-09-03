@@ -13,7 +13,12 @@ license: mit
 # YAMS
 Yet Another Motionsense Service utility
 
-### [Code](https://github.com/SenSE-Lab-OSU/YAMS) | [PyPI](https://pypi.org/project/yams-util/) | [🤗 Demo (UI only)](https://huggingface.co/spaces/Oink8154/YAMS)
+### [Code](https://github.com/SenSE-Lab-OSU/YAMS) | [🤗 Demo (UI only)](https://huggingface.co/spaces/Oink8154/YAMS)
+
+> **YAMS 2.x** is a thin, MSense-only front-end for
+> [**PLASMA**](https://github.com/YuyiChang/PLASMA). All acquisition, BLE and
+> analysis code lives in PLASMA's `msense` plugin; YAMS just picks the tab
+> layout and the branding. Multi-sensor users want PLASMA directly.
 
 ## Quickstart
 
@@ -24,17 +29,20 @@ Yet Another Motionsense Service utility
 ### Development
 
 1. (optional) create a dedicated conda environment
-    - `conda create -n yams python=3.12`
-    - `conda activate yams`
-2. Clone this repository
-    - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
-    - `cd yams`
-3. Install dependencies
-    - `pip install -r requirements.txt`
-4. Config `liblsl`
+    - `conda create -n yams python=3.12 && conda activate yams`
+2. Config `liblsl`
     - `conda install -c conda-forge liblsl`
-5. Lauch YAMS
-    - `python -m yams`
+3. Clone **both** repos side by side and install editable
+    - `git clone https://github.com/YuyiChang/PLASMA.git`
+    - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
+    - `pip install -e ./PLASMA`
+    - `pip install -e ./YAMS`
+    - (or, to pull PLASMA straight from git: `cd YAMS && pip install -r requirements.txt`)
+4. Launch YAMS
+    - `python -m yams`  (or the `yams` console script)
+
+State (device config, gyro-bias, `yams-data/` recordings, session log) lives in
+the working directory; set `PLASMA_HOME` to relocate it.
 
 ### (Deprecated) Windows
 
@@ -66,62 +74,28 @@ Refer to [Extract onboard data](doc/file_download.md)
 
 Refer to [Data Extraction Feature](doc/data_extraction.md)
 
-### Emergency stop
-
-> Terminating data collection is also available in YAMS web app under `bluetooth scanner - collection control - stop`
-
-To halt all on-going collection on the MotionSenSE wristbands, 
-
-- On windows, go to your folder where the setup scripts are located as in [Quickstart-Windows](#quickstart) part
-- Locate and double-click `emergency_stop.bat`
-- Wait until all operations are completed
-
-
-## Installation
-
-- `pip install -U yams-util`
-- `python -m yams`
-
-## Development guide
-
-- Clone the repository
-    - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
-- Install dependencies 
-    - `pip install -r requirements.txt`
-- Launch the application
-    - `python -m yams`
-- Visit http://127.0.0.1:7860 (by default, check on-screen prompt)
-
 ## Build guide
 
-- Install pyinstaller via `pip install pyinstaller`
-- Create .spec by `pyi-makespec --collect-data=gradio_client --collect-data=gradio --collect-data=safehttpx --collect-data=groovy --onefile app.py`
-- Manually add the following in `a = analysis ...`
+`plasma-app` ships a PyInstaller hook (auto-discovered once it is `pip install`ed),
+so the specs carry no hand-maintained hidden-import list.
 
-```
-    module_collection_mode={
-        'gradio': 'py',  # Collect gradio package as source .py files
-    },
-```
-- Build the app: `pyinstaller app.spec`
-
-
-### MacOS
-
-`pyi-makespec --collect-data=gradio_client --collect-data=gradio --collect-data=safehttpx --collect-data=groovy --onefile --osx-bundle-identifier 'com.yams' --icon yams/resources/icons/yams.icns app.py`
-
+- `pip install -e ".[build]"`
+- macOS: `pyinstaller app_macos.spec --noconfirm`  → `dist/YAMS_MacOS_arm64`
+- Windows: `pyinstaller app_windows.spec --noconfirm`  → `dist/YAMS_Windows_x64.exe`
 
 ## Instructions
 
 ### (advanced) running data extraction in command line
 
-Run from the project root:
+The extraction toolkit now lives in PLASMA. `python -m yams.data_extraction` is a
+thin shim for `python -m plasma.devices.msense.extract`:
 
 ```bash
-python -m yams.data_extraction -i "data_in" -o "data_out"
+python -m yams.data_extraction -i "data_in" -o "data_out"          # single folder of .bin
+python -m plasma.devices.msense.extract batch -i "zips" -o "out"   # folder of .zip archives
 ```
 
-**All options:**
+**Common options** (pass to the `dir` form above):
 
 | Flag | Default | Description |
 |---|---|---|
@@ -131,7 +105,6 @@ python -m yams.data_extraction -i "data_in" -o "data_out"
 | `--ignore_id` | off | Skip subject/session ID parsing; use raw filenames |
 | `--legacy_fs` | off | Use 25 Hz clock for CDCT (uncommon, old devices) |
 | `--force_new_format` | off | Force v4.7.0+ binary layout regardless of `uuid.txt` version |
-| `--mode` | `dir` | `dir`: single folder of `.bin` files; `batch`: folder of `.zip` archives |
 
 **Data type detection** — the extractor scans the input folder and processes whichever file types are present:
 
@@ -162,7 +135,7 @@ python -m yams.data_extraction -i "data/session01" -o "out/session01" --force_ne
 python -m yams.data_extraction -i "data/subject01" -o "out/subject01" --save_format pickle --ignore_id
 
 # Batch extract a folder of zip archives
-python -m yams.data_extraction -i "data_in" --mode batch
+python -m plasma.devices.msense.extract batch -i "data_in" -o "out"
 ```
 
 **Notes:**
