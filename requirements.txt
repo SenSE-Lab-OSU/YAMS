@@ -1,10 +1,9 @@
-gradio
-bleak
-psutil
-apscheduler
-matplotlib
-simplepyble
-pylsl
-scipy
-pandas
-plotly
+# YAMS 2.x is a thin front-end over PLASMA — this one dependency pulls the whole
+# acquisition/analysis stack (PLASMA's `msense` extra: simplepyble, scipy, pandas,
+# matplotlib, psutil, gradio, plotly, pylsl, ...). Used by the HF Space and by
+# `pip install -r requirements.txt`.
+#
+# For local development prefer an editable install of both repos:
+#     pip install -e ../PLASMA
+#     pip install -e .
+plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@packaging

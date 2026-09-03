@@ -1,33 +1,51 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "yams-util"
-version = "1.6.0"
+dynamic = ["version"]
 authors = [
-  { name="Yuyi Chang", email="roomier_guanine_05@icloud.com" },
+  { name = "Yuyi Chang", email = "roomier_guanine_05@icloud.com" },
 ]
-dependencies = [
-    "bleak",
-    "gradio",
-    "psutil",
-    "apscheduler",
-    "matplotlib",
-    "simplepyble",
-    "pylsl",
-    "scipy",
-    "pandas",
-    "plotly"
-]
-description = "Yet Another MotionSenSE Service Utility"
+description = "Yet Another MotionSenSE Service Utility — an MSense-only front-end for PLASMA"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
 
+# YAMS 2.x is a thin front-end: it depends on PLASMA, and PLASMA's `msense`
+# extra pulls the real acquisition/analysis stack (simplepyble, scipy, pandas,
+# matplotlib, psutil, gradio, plotly, pylsl, ...).
+#
+# During PLASMA/YAMS co-development, install PLASMA editable first and this line
+# resolves against it:  `pip install -e ../PLASMA && pip install -e .`
+dependencies = [
+    "plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@packaging",
+]
+
+[project.optional-dependencies]
+build = ["pyinstaller"]
+test = ["pytest"]
+
+[project.scripts]
+yams = "yams.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/SenSE-Lab-OSU/YAMS"
 Issues = "https://github.com/SenSE-Lab-OSU/YAMS/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "yams.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["yams*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+yams = ["resources/icons/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

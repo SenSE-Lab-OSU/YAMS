@@ -24,7 +24,11 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -c conda-forge liblsl -y
-          pip install pyinstaller -r requirements.txt
+          pip install -e ".[build,test]"
+
+      - name: Run tests
+        shell: bash -el {0}
+        run: pytest
 
       - name: Build
         shell: bash -el {0}
@@ -63,7 +67,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install pyinstaller -r requirements.txt
+        run: pip install -e ".[build]"
+
+      - name: Run tests
+        run: pytest
 
       - name: Build
         run: pyinstaller app_windows.spec --noconfirm

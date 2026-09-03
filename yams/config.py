@@ -1,7 +1,16 @@
 import os
 import sys
 
-__version__ = "1.6.0"
+from yams import __version__  # noqa: F401  (re-exported for callers)
+
+# YAMS 2.x is a thin MSense-only front-end over PLASMA. These are the identity
+# knobs it hands to PLASMA's app_context — kept here so the launcher, the CLI
+# shims and the PyInstaller specs all agree.
+APP_NAME = "YAMS"
+JOURNAL_STREAM = "YAMS"
+DATA_DIR_NAME = "yams-data"
+CONFIG_FILENAME = "yams_device_config.json"
+GYRO_BIAS_FILENAME = "yams_gyro_bias.json"
 
 
 def resource_path(*parts):
