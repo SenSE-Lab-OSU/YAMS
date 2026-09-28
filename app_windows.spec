@@ -33,9 +33,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='YAMS_Windows_x64',
     icon='yams/resources/icons/yams.ico',
     debug=False,
@@ -50,4 +49,16 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+# Keep the executable and support files together so Inno Setup can install
+# them without the extraction delay of a one-file PyInstaller executable.
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='YAMS_Windows_x64',
 )

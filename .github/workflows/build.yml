@@ -107,32 +107,41 @@ jobs:
 
       - name: Smoke test
         shell: pwsh
+        run: '& .\.github\smoke_windows.ps1 -ExePath dist\YAMS_Windows_x64\YAMS_Windows_x64.exe'
+
+      - name: Zip portable bundle
+        shell: pwsh
+        run: Compress-Archive -Path dist\YAMS_Windows_x64\* -DestinationPath dist\YAMS_Windows_x64.zip
+
+      - name: Build installer
+        shell: pwsh
         run: |
-          $process = Start-Process -FilePath ".\dist\YAMS_Windows_x64.exe" -PassThru -RedirectStandardOutput "yams-smoke.log" -RedirectStandardError "yams-smoke.err"
-          $ready = $false
-          try {
-            for ($i = 0; $i -lt 120; $i++) {
-              Start-Sleep -Seconds 1
-              $process.Refresh()
-              if ($process.HasExited) { throw "YAMS exited with code $($process.ExitCode)" }
-              try {
-                $response = Invoke-WebRequest -Uri "http://127.0.0.1:7860/" -UseBasicParsing -TimeoutSec 2
-                if ($response.StatusCode -eq 200) { $ready = $true; break }
-              } catch {}
-            }
-            if (-not $ready) { throw "Timed out waiting for YAMS" }
-            Write-Host "YAMS served its UI"
-          } finally {
-            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
-            if (-not $ready) { Get-Content yams-smoke.err -ErrorAction SilentlyContinue }
-          }
+          $version = python -c "import yams; print(yams.__version__)"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" packaging\windows\yams_installer.iss
+
+      - name: Install silently
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP 'YAMS_installed'
+          $setup = (Resolve-Path 'dist\YAMS_Windows_x64_Setup.exe').Path
+          $installer = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$installDir`"" -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "Installer exited with code $($installer.ExitCode)" }
+          "YAMS_INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
+
+      - name: Smoke test installed copy
+        shell: pwsh
+        run: '& .\.github\smoke_windows.ps1 -ExePath "$env:YAMS_INSTALL_DIR\YAMS_Windows_x64.exe"'
 
       - uses: actions/upload-artifact@v4
         with:
           name: YAMS-Windows-x64
-          path: dist/YAMS_Windows_x64.exe
+          path: |
+            dist/YAMS_Windows_x64.zip
+            dist/YAMS_Windows_x64_Setup.exe
 
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/YAMS_Windows_x64.exe
+          files: |
+            dist/YAMS_Windows_x64.zip
+            dist/YAMS_Windows_x64_Setup.exe

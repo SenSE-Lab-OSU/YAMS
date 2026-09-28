@@ -24,7 +24,11 @@ Yet Another Motionsense Service utility
 
 ### Pre-compiled version
 
-- Download the latest release from [here](https://github.com/SenSE-Lab-OSU/YAMS/releases)
+- Windows x64: [download the installer](https://github.com/SenSE-Lab-OSU/YAMS/releases/latest/download/YAMS_Windows_x64_Setup.exe). A [portable zip](https://github.com/SenSE-Lab-OSU/YAMS/releases/latest/download/YAMS_Windows_x64.zip) is also available.
+- macOS Apple Silicon: download the executable from [Releases](https://github.com/SenSE-Lab-OSU/YAMS/releases).
+
+The Windows installer is unsigned, so Windows SmartScreen may ask for confirmation.
+For the portable zip, extract the whole folder before running the executable.
 
 ### Development
 
@@ -42,8 +46,9 @@ To develop PLASMA alongside YAMS, clone PLASMA next to YAMS, check out
 `v2.2.3`, install it with `pip install -e ../PLASMA`, then install YAMS with
 `pip install -e . --no-deps` so the local PLASMA checkout remains active.
 
-State (device config, gyro-bias, `yams-data/` recordings, session log) lives in
-the working directory; set `PLASMA_HOME` to relocate it.
+When run from source, state (device config, gyro-bias, `yams-data/` recordings,
+session log) lives in the working directory. Packaged apps use PLASMA's per-user
+app-data directory. Set `PLASMA_HOME` to choose a different location.
 
 ### (Deprecated) Windows
 
@@ -93,7 +98,8 @@ so the specs carry no hand-maintained hidden-import list.
 
 - `pip install -e ".[build]"`
 - macOS: `pyinstaller app_macos.spec --noconfirm`  → `dist/YAMS_MacOS_arm64`
-- Windows: `pyinstaller app_windows.spec --noconfirm`  → `dist/YAMS_Windows_x64.exe`
+- Windows: `pyinstaller app_windows.spec --noconfirm` → `dist/YAMS_Windows_x64/`
+- Windows installer: `ISCC.exe /DMyAppVersion=2.0.0 packaging\windows\yams_installer.iss` → `dist/YAMS_Windows_x64_Setup.exe`
 
 ## Instructions
 
