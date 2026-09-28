@@ -1,8 +1,8 @@
 """YAMS 2.x — a thin MSense-only front-end over PLASMA.
 
-Every panel here is PLASMA's (`plasma.devices.msense.panels.*` + the shared
-`IntegratedPanel`); YAMS only picks the tab layout, the branding and the
-MSense-only device set. The v1 tab structure is preserved.
+Device operations and the auxiliary panels come from PLASMA. YAMS supplies a
+v1-style controller UI that sends the user's scanned selection through PLASMA's
+existing MSense config and session methods.
 
 `configure()` MUST run before any `plasma.*` import that builds a singleton off
 `app_context()` (notably `plasma.config`), so every PLASMA import in this module
@@ -37,9 +37,7 @@ def build():
     from plasma import plugins
     from plasma.config import device_config
     from plasma.integrated_panel import IntegratedPanel
-    from plasma.devices.msense.config import config_section as msense_config_section
     from plasma.devices.msense.panels.clocksync import build_clocksync
-    from plasma.devices.msense.panels.control import build_control_tab
     from plasma.devices.msense.panels.downloader import build_downloader
     from plasma.devices.msense.panels.extractor import build_extractor, build_extractor_pro
     from plasma.devices.msense.panels.imu import build_imu_tab
@@ -47,6 +45,7 @@ def build():
     from plasma.devices.msense.panels.uuid_tools import build_device_manager, build_uuid_extractor
     from plasma.devices.msense.panels.viewer import build_viewer
     from yams.config import __version__
+    from yams.controller import build_controller
 
     plugins.load_plugins()
     device_config.refresh_defaults()
@@ -56,33 +55,30 @@ def build():
 
     with gr.Blocks(title="YAMS") as demo:
         with gr.Tab("⌚️ MotionSenSE controller"):
-            with gr.Accordion("🔍 Wristband setup — scan / list / device_info.json", open=False):
-                msense_config_section(device_config)
-            ip.interface()
-            build_control_tab(ip)
+            build_controller(ip, device_config)
 
-        with gr.Tab("📡 Signal quality"):
-            build_sqc_tab(ip)
-        with gr.Tab("🧭 IMU / Orientation"):
-            build_imu_tab(ip)
-        with gr.Tab("📈 Signal visualizer"):
-            ip.visualizer_interface()
+        # with gr.Tab("📡 Signal quality"):
+        #     build_sqc_tab(ip)
+        # with gr.Tab("🧭 IMU / Orientation"):
+        #     build_imu_tab(ip)
+        # with gr.Tab("📈 Signal visualizer"):
+        #     ip.visualizer_interface()
 
         with gr.Tab("📂 File downloader"):
             build_downloader(ip)
-        with gr.Tab("📋 UUID extractor"):
-            build_uuid_extractor(ip)
+        # with gr.Tab("📋 UUID extractor"):
+        #     build_uuid_extractor(ip)
         with gr.Tab("📊 Data viewer"):
             build_viewer(ip)
         with gr.Tab("🛠️ Data extractor"):
             build_extractor(ip)
         with gr.Tab("🛠️ Data extractor pro"):
             build_extractor_pro(ip)
-        with gr.Tab("⏱️ Clock Sync"):
-            build_clocksync(ip)
-        with gr.Tab("📒 Extensions"):
-            with gr.Accordion(label="📒 Device manager"):
-                build_device_manager(ip)
+        # with gr.Tab("⏱️ Clock Sync"):
+        #     build_clocksync(ip)
+        # with gr.Tab("📒 Extensions"):
+        #     with gr.Accordion(label="📒 Device manager"):
+        #         build_device_manager(ip)
 
         gr.Markdown(
             f"[YAMS](https://github.com/SenSE-Lab-OSU/YAMS) v{__version__}: "

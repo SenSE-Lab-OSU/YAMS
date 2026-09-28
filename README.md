@@ -66,6 +66,17 @@ the working directory; set `PLASMA_HOME` to relocate it.
 
 ## General usage
 
+### Connect and record
+
+In **MotionSenSE controller**, press **Search Bluetooth devices**, select one or
+more discovered wristbands, then press **Connect selected**. **Start** and
+**Stop** control the connected set. To change that set, select wristbands and
+press **Connect selected** again. The **Danger zone** erases flash on the
+connected set after you enter code `68` and enable the erase control.
+
+YAMS remembers the selection in its MSense configuration automatically; you do
+not need to edit a device table before connecting.
+
 ### Download onboard data
 
 Refer to [Extract onboard data](doc/file_download.md)
