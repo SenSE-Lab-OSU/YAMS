@@ -1,14 +1,12 @@
 name: Deploy landing page
 
-# GitHub Pages can only serve the repo root or /docs when deploying from a
-# branch, so the site is published as an Actions artifact instead. That is what
-# lets it live in web/ rather than being renamed to suit Pages.
+# Publish the static site in docs/ as a GitHub Pages artifact.
 
 on:
   push:
-    branches: [main]
+    branches: [v2]
     paths:
-      - 'web/**'
+      - 'docs/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -35,7 +33,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: docs
 
       - id: deployment
         uses: actions/deploy-pages@v4

@@ -2,13 +2,15 @@ name: Build YAMS
 
 on:
   push:
+    branches:
+      - v2
     tags:
       - 'v*'
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -30,7 +32,9 @@ jobs:
 
   build-macos:
     needs: test
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -53,15 +57,24 @@ jobs:
       - name: Smoke test
         shell: bash -el {0}
         run: |
-          ./dist/YAMS_MacOS_arm64 &
+          BROWSER=/usr/bin/true ./dist/YAMS_MacOS_arm64 > yams-smoke.log 2>&1 &
           PID=$!
-          sleep 10
-          if kill -0 $PID 2>/dev/null; then
-            echo "Smoke test passed"
-            kill $PID
-          else
-            echo "Binary exited early" && exit 1
-          fi
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          for i in {1..120}; do
+            if curl -fsS http://127.0.0.1:7860/ > /dev/null; then
+              echo "YAMS served its UI"
+              exit 0
+            fi
+            if ! kill -0 "$PID" 2>/dev/null; then
+              cat yams-smoke.log
+              echo "Binary exited before serving its UI"
+              exit 1
+            fi
+            sleep 1
+          done
+          cat yams-smoke.log
+          echo "Timed out waiting for YAMS"
+          exit 1
 
       - uses: actions/upload-artifact@v4
         with:
@@ -75,7 +88,9 @@ jobs:
 
   build-windows:
     needs: test
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -89,6 +104,28 @@ jobs:
 
       - name: Build
         run: pyinstaller app_windows.spec --noconfirm
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath ".\dist\YAMS_Windows_x64.exe" -PassThru -RedirectStandardOutput "yams-smoke.log" -RedirectStandardError "yams-smoke.err"
+          $ready = $false
+          try {
+            for ($i = 0; $i -lt 120; $i++) {
+              Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) { throw "YAMS exited with code $($process.ExitCode)" }
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:7860/" -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch {}
+            }
+            if (-not $ready) { throw "Timed out waiting for YAMS" }
+            Write-Host "YAMS served its UI"
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            if (-not $ready) { Get-Content yams-smoke.err -ErrorAction SilentlyContinue }
+          }
 
       - uses: actions/upload-artifact@v4
         with:

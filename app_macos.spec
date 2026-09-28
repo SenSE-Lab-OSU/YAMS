@@ -30,7 +30,9 @@ a = Analysis(
     pathex=[],
     binaries=[(_liblsl, 'pylsl/lib')],
     datas=datas,
-    hiddenimports=['pylsl'],
+    # scipy.linalg imports this extension at runtime; PyInstaller 6.13's
+    # SciPy hooks miss it with SciPy 1.16.
+    hiddenimports=['pylsl', 'scipy._cyutility'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
