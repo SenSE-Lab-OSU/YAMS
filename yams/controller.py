@@ -23,17 +23,8 @@ def _selected_records(existing, scanned, selected):
         if address not in scanned:
             record["Enabled"] = False
 
-    # The PLASMA driver uses Name as a dictionary key. Give newly discovered
-    # wristbands with identical advertised names distinct, stable identifiers.
-    used = set()
-    for address, record in by_address.items():
-        if not record["Enabled"]:
-            continue
-        name = str(record.get("Name", "")).strip() or scanned[address]["name"]
-        if name in used:
-            name = f"{name} ({address[-5:].replace(':', '')})"
-        record["Name"] = name
-        used.add(name)
+    # PLASMA 2.2.3 keys wristbands by address, so duplicate advertised names
+    # can be kept exactly as the device reports them.
     return list(by_address.values())
 
 
@@ -90,7 +81,9 @@ def build_controller(ip, device_config):
             return f"Connection failed: {exc}"
         driver = next((dev for dev in ip.available_devices
                        if hasattr(dev, "active_devices")), None)
-        connected = list(driver.active_devices) if driver is not None else []
+        connected = ([f"{driver.display_name(address)} [{address}]"
+                      for address in driver.active_devices]
+                     if driver is not None else [])
         if not connected:
             return "No selected wristbands connected. Search again and retry."
         return f"Connected: {', '.join(connected)}"
@@ -120,37 +113,20 @@ def build_controller(ip, device_config):
             btn_stop = gr.Button("Stop🛑")
         btn_start.click(ip.start_collection)
         btn_stop.click(ip.stop_collection)
-        if hasattr(ip, "_set_record_lsl"):
-            record_lsl = gr.Checkbox(
-                value=ip.record_lsl, label="📼 Record all LSL streams to XDF")
-            record_lsl.change(ip._set_record_lsl, inputs=record_lsl)
+        record_lsl = gr.Checkbox(
+            value=ip.record_lsl, label="📼 Record all LSL streams to XDF")
+        record_lsl.change(ip._set_record_lsl, inputs=record_lsl)
 
-    if hasattr(ip, "_render_memo"):
-        memo = gr.HTML(ip._render_memo())
-        gr.Timer(value=1).tick(fn=ip._render_memo, outputs=memo, show_progress="hidden")
-    else:
-        memo = gr.ParamViewer({"Memo": {"type": "Welcome"}})
-        gr.Timer(value=1).tick(fn=ip.update_params, outputs=memo)
+    memo = gr.HTML(ip._render_memo())
+    gr.Timer(value=1).tick(fn=ip._render_memo, outputs=memo, show_progress="hidden")
 
     with gr.Accordion("🗒️ Journaler", open=False):
-        if hasattr(ip, "_flag_journal"):
-            free_txt = gr.Text(label="Marker text", placeholder="free text")
-            with gr.Row():
-                btn_send_msg = gr.Button("✍️ Record message")
-                btn_flag = gr.Button("🚩 Flag", scale=0)
-            btn_send_msg.click(ip._record_journal, inputs=free_txt, outputs=free_txt)
-            btn_flag.click(ip._flag_journal)
-        else:
-            from plasma.journal import MSG_TYPES, task_labels
-
-            with gr.Row():
-                msg_type = gr.Radio(MSG_TYPES, value=MSG_TYPES[0], label="Message type")
-                task_name = gr.Dropdown(task_labels(), label="Task name")
-                task_name_refresh = gr.Button("🔄", scale=0)
-            free_txt = gr.Text(label="Free text", placeholder="optional")
+        free_txt = gr.Text(label="Marker text", placeholder="free text")
+        with gr.Row():
             btn_send_msg = gr.Button("✍️ Record message")
-            task_name_refresh.click(lambda: gr.Dropdown(choices=task_labels()), outputs=task_name)
-            btn_send_msg.click(ip._record_journal, inputs=[msg_type, task_name, free_txt])
+            btn_flag = gr.Button("🚩 Flag", scale=0)
+        btn_send_msg.click(ip._record_journal, inputs=free_txt, outputs=free_txt)
+        btn_flag.click(ip._flag_journal)
 
     # This panel supplies PLASMA's existing code-68 gate, erase call, and
     # reconnect/diagnostic controls for the wristbands connected above.

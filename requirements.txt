@@ -3,7 +3,5 @@
 # matplotlib, psutil, gradio, plotly, pylsl, ...). Used by the HF Space and by
 # `pip install -r requirements.txt`.
 #
-# For local development prefer an editable install of both repos:
-#     pip install -e ../PLASMA
-#     pip install -e .
-plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v1.0.0
+# Keep this tag in sync with pyproject.toml for source and HF Space installs.
+plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v2.2.3

@@ -75,7 +75,7 @@
       <a class="btn ghost" href="#install">Install with pip</a>
     </div>
     <p class="meta">
-      <span>Windows &amp; macOS</span><span>Python 3.12+</span><span>MIT licensed</span>
+      <span>YAMS 2.0 · PLASMA 2.2.3</span><span>Windows &amp; macOS</span><span>Python 3.12+</span><span>MIT licensed</span>
     </p>
   </div>
 </div>
@@ -95,7 +95,7 @@
       <div class="card">
         <span class="tab-name">⌚️ MotionSenSE controller</span>
         <h3>Run a collection</h3>
-        <p>Connect to wristbands, start and stop recording, and watch collection state live.</p>
+        <p>Scan for wristbands, select one or more to connect, then start and stop recording while watching collection state live.</p>
       </div>
       <div class="card">
         <span class="tab-name">📂 File downloader</span>
@@ -170,7 +170,8 @@ python -m yams</pre></div>
         <p style="margin-bottom:.9rem">For development, or to run unreleased changes.</p>
         <div class="code"><button class="copy" type="button">Copy</button><pre>git clone https://github.com/SenSE-Lab-OSU/YAMS.git
 cd YAMS
-pip install -r requirements.txt
+git checkout v2
+pip install -e .
 conda install -c conda-forge liblsl
 python -m yams</pre></div>
       </div>
@@ -202,7 +203,7 @@ python -m yams</pre></div>
       <li>
         <h3>Collect</h3>
         <p>
-          In <strong>⌚️ MotionSenSE controller</strong>, connect the wristbands and start
+          In <strong>⌚️ MotionSenSE controller</strong>, scan, select the wristbands to connect, and start
           the collection. Data is written to onboard flash, so the devices do not need to
           stay in range once recording has begun.
         </p>

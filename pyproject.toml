@@ -20,10 +20,9 @@ classifiers = [
 # extra pulls the real acquisition/analysis stack (simplepyble, scipy, pandas,
 # matplotlib, psutil, gradio, plotly, pylsl, ...).
 #
-# During PLASMA/YAMS co-development, install PLASMA editable first and this line
-# resolves against it:  `pip install -e ../PLASMA && pip install -e .`
+# The v2.0 release uses the tested PLASMA tag, including its MSense extra.
 dependencies = [
-    "plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v1.0.0",
+    "plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v2.2.3",
 ]
 
 [project.optional-dependencies]

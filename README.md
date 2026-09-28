@@ -15,8 +15,8 @@ Yet Another Motionsense Service utility
 
 ### [Code](https://github.com/SenSE-Lab-OSU/YAMS) | [🤗 Demo (UI only)](https://huggingface.co/spaces/Oink8154/YAMS)
 
-> **YAMS 2.x** is a thin, MSense-only front-end for
-> [**PLASMA**](https://github.com/YuyiChang/PLASMA). All acquisition, BLE and
+> **YAMS 2.0** is a thin, MSense-only front-end for
+> [**PLASMA v2.2.3**](https://github.com/YuyiChang/PLASMA/releases/tag/v2.2.3). All acquisition, BLE and
 > analysis code lives in PLASMA's `msense` plugin; YAMS just picks the tab
 > layout and the branding. Multi-sensor users want PLASMA directly.
 
@@ -32,14 +32,15 @@ Yet Another Motionsense Service utility
     - `conda create -n yams python=3.12 && conda activate yams`
 2. Config `liblsl`
     - `conda install -c conda-forge liblsl`
-3. Clone **both** repos side by side and install editable
-    - `git clone https://github.com/YuyiChang/PLASMA.git`
+3. Install YAMS from source; its dependency fetches PLASMA v2.2.3
     - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
-    - `pip install -e ./PLASMA`
-    - `pip install -e ./YAMS`
-    - (or, to pull PLASMA straight from git: `cd YAMS && pip install -r requirements.txt`)
+    - `cd YAMS && git checkout v2 && pip install -e .`
 4. Launch YAMS
     - `python -m yams`  (or the `yams` console script)
+
+To develop PLASMA alongside YAMS, clone PLASMA next to YAMS, check out
+`v2.2.3`, install it with `pip install -e ../PLASMA`, then install YAMS with
+`pip install -e . --no-deps` so the local PLASMA checkout remains active.
 
 State (device config, gyro-bias, `yams-data/` recordings, session log) lives in
 the working directory; set `PLASMA_HOME` to relocate it.

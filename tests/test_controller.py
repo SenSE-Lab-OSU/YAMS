@@ -5,7 +5,7 @@ from yams.controller import _selected_records
 
 def test_selection_preserves_saved_names_and_disables_unselected_devices():
     existing = [
-        {"Name": "Left", "Nickname": "wrist", "UUID / MAC Address": "AA:01",
+        {"Name": "Left", "Nickname": "wrist", "UUID / MAC Address": "aa:01",
          "Enabled": True, "IMU Stream": True},
         {"Name": "Right", "Nickname": "", "UUID / MAC Address": "AA:02",
          "Enabled": True, "IMU Stream": False},
@@ -25,4 +25,5 @@ def test_selection_preserves_saved_names_and_disables_unselected_devices():
     assert by_address["AA:02"]["Enabled"] is False
     assert by_address["AA:03"]["Enabled"] is True
     assert by_address["AA:04"]["Enabled"] is True
-    assert by_address["AA:03"]["Name"] != by_address["AA:04"]["Name"]
+    assert by_address["AA:03"]["Name"] == "MSense"
+    assert by_address["AA:04"]["Name"] == "MSense"

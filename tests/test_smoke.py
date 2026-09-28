@@ -8,7 +8,7 @@ pytest.importorskip("plasma", reason="install PLASMA: pip install -e ../PLASMA")
 def test_version():
     import yams
 
-    assert yams.__version__.split(".")[0] == "2"
+    assert yams.__version__ == "2.0.0"
 
 
 def test_configure_rebrands_to_yams():
