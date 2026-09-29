@@ -23,7 +23,7 @@ def _selected_records(existing, scanned, selected):
         if address not in scanned:
             record["Enabled"] = False
 
-    # PLASMA 2.2.3 keys wristbands by address, so duplicate advertised names
+    # PLASMA keys wristbands by address, so duplicate advertised names
     # can be kept exactly as the device reports them.
     return list(by_address.values())
 

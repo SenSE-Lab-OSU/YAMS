@@ -4,4 +4,4 @@
 # `pip install -r requirements.txt`.
 #
 # Keep this tag in sync with pyproject.toml for source and HF Space installs.
-plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v2.2.3
+plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v2.2.4

@@ -16,7 +16,7 @@ Yet Another Motionsense Service utility
 ### [Code](https://github.com/SenSE-Lab-OSU/YAMS) | [🤗 Demo (UI only)](https://huggingface.co/spaces/Oink8154/YAMS)
 
 > **YAMS 2.0** is a thin, MSense-only front-end for
-> [**PLASMA v2.2.3**](https://github.com/YuyiChang/PLASMA/releases/tag/v2.2.3). All acquisition, BLE and
+> [**PLASMA v2.2.4**](https://github.com/YuyiChang/PLASMA/releases/tag/v2.2.4). All acquisition, BLE and
 > analysis code lives in PLASMA's `msense` plugin; YAMS just picks the tab
 > layout and the branding. Multi-sensor users want PLASMA directly.
 
@@ -36,14 +36,14 @@ For the portable zip, extract the whole folder before running the executable.
     - `conda create -n yams python=3.12 && conda activate yams`
 2. Config `liblsl`
     - `conda install -c conda-forge liblsl`
-3. Install YAMS from source; its dependency fetches PLASMA v2.2.3
+3. Install YAMS from source; its dependency fetches PLASMA v2.2.4
     - `git clone https://github.com/SenSE-Lab-OSU/YAMS.git`
     - `cd YAMS && git checkout v2 && pip install -e .`
 4. Launch YAMS
     - `python -m yams`  (or the `yams` console script)
 
 To develop PLASMA alongside YAMS, clone PLASMA next to YAMS, check out
-`v2.2.3`, install it with `pip install -e ../PLASMA`, then install YAMS with
+`v2.2.4`, install it with `pip install -e ../PLASMA`, then install YAMS with
 `pip install -e . --no-deps` so the local PLASMA checkout remains active.
 
 When run from source, state (device config, gyro-bias, `yams-data/` recordings,
@@ -100,6 +100,20 @@ so the specs carry no hand-maintained hidden-import list.
 - macOS: `pyinstaller app_macos.spec --noconfirm`  → `dist/YAMS_MacOS_arm64`
 - Windows: `pyinstaller app_windows.spec --noconfirm` → `dist/YAMS_Windows_x64/`
 - Windows installer: `ISCC.exe /DMyAppVersion=2.0.0 packaging\windows\yams_installer.iss` → `dist/YAMS_Windows_x64_Setup.exe`
+
+### Updating version numbers
+
+When adopting a new PLASMA release, change its tag in both `pyproject.toml`
+(the YAMS package dependency) and `requirements.txt` (source/HF installs).
+Update the PLASMA version shown in this README and `docs/index.html`, then
+install the new dependency and run the tests and app startup check.
+
+When releasing a new **YAMS** version, change `yams/__init__.py` and the
+expected version in `tests/test_smoke.py`. Update the YAMS version shown in
+this README and `docs/index.html`, plus the manual `ISCC.exe` example above.
+CI reads `yams.__version__` automatically for the Windows installer. Run the
+build workflow manually and check its smoke tests before creating a release
+tag.
 
 ## Instructions
 

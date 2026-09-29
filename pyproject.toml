@@ -20,9 +20,9 @@ classifiers = [
 # extra pulls the real acquisition/analysis stack (simplepyble, scipy, pandas,
 # matplotlib, psutil, gradio, plotly, pylsl, ...).
 #
-# The v2.0 release uses the tested PLASMA tag, including its MSense extra.
+# Pin the tested PLASMA release, including its MSense extra.
 dependencies = [
-    "plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v2.2.3",
+    "plasma-app[msense] @ git+https://github.com/YuyiChang/PLASMA@v2.2.4",
 ]
 
 [project.optional-dependencies]
